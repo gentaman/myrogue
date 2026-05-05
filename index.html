@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- 1. まずwasm_exec.jsを読み込む -->
+    <script src="wasm_exec.js"></script>
+    <script>
+      // 2. Goクラスをインスタンス化
+      const go = new Go();
+      
+      // 3. コンパイルしたwasmファイルを読み込んで実行
+      WebAssembly.instantiateStreaming(fetch("game.wasm"), go.importObject).then((result) => {
+        go.run(result.instance);
+      });
+    </script>
+  </head>
+  <body></body>
+</html>
