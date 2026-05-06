@@ -1,0 +1,42 @@
+My Rogue
+
+---
+
+FONT
+
+M+ FONTS (mplus1.ttf)
+Copyright 2021 The M+ FONTS Project Authors
+https://github.com/coz-m/MPLUS_FONTS
+License: SIL Open Font License 1.1
+
+---
+
+SOUND EFFECTS
+
+8-bit Sound Effects Pack 001
+
+@Shades
+https://soundcloud.com/noshades
+
+---
+
+GAME ENGINE
+
+Ebiten v2
+Copyright 2013 Hajime Hoshi
+https://ebitengine.org
+License: Apache License 2.0
+
+---
+
+PROGRAMMING
+
+gentaman
+
+---
+
+Special Thanks
+
+You
+
+---
