@@ -5,7 +5,7 @@
 
 # WASMビルド
 build:
-	GOOS=js GOARCH=wasm go build -o game.wasm main.go
+	GOOS=js GOARCH=wasm go build -o game.wasm ./cmd/myrogue/
 
 # 開発サーバー起動（ビルド後に自動起動）
 serve: build
