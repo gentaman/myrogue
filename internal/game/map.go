@@ -11,7 +11,7 @@ type TileType int
 const (
 	Wall TileType = iota
 	Floor
-	Stairs     // 上り階段（フロア0の出口）
+	Stairs // 上り階段（フロア0の出口）
 	Treasure
 	StairsDown // 下り階段（次のフロアへ）
 	StairsUp   // 上り階段（前のフロアへ、フロア1・2に配置）
@@ -104,11 +104,14 @@ func (g *GameScene) generateMap() {
 
 	g.maxEnemies = len(g.rooms)
 
-	// 各部屋に確率でアイテムを配置（プレイヤー開始部屋を除く）
-	for i, r := range g.rooms {
-		if i == 0 {
-			continue
-		}
+	weights := []int{}
+
+	for i := 0; i < int(itemKindCount)-1; i++ {
+		weights = append(weights, -itemDefs[i].rarity)
+	}
+
+	// 各部屋に確率でアイテムを配置
+	for _, r := range g.rooms {
 		if rng.Intn(2) == 0 {
 			for attempt := 0; attempt < 30; attempt++ {
 				ix := r.x + rng.Intn(r.w)
@@ -116,8 +119,11 @@ func (g *GameScene) generateMap() {
 				if g.worldMap[ix][iy] != Floor {
 					continue
 				}
-				kind := ItemKind(rng.Intn(int(itemKindCount)))
-				g.mapItems = append(g.mapItems, MapItem{x: ix, y: iy, kind: kind, obtainedSeed: g.mapSeed, obtainedFloor: g.floor})
+				idx := weightedChoice(rng, itemDefs, weights)
+				if idx >= 0 {
+					kind := ItemKind(idx)
+					g.mapItems = append(g.mapItems, MapItem{x: ix, y: iy, kind: kind, obtainedSeed: g.mapSeed, obtainedFloor: g.floor})
+				}
 				break
 			}
 		}
@@ -140,6 +146,12 @@ func (g *GameScene) digHorizontal(x1, x2, y int) {
 	}
 	for x := x1; x <= x2; x++ {
 		if g.worldMap[x][y] == Wall {
+			if y > 0 {
+				g.worldMap[x][y-1] = Wall
+			}
+			if y < mapHeight {
+				g.worldMap[x][y+1] = Wall
+			}
 			g.worldMap[x][y] = Floor
 		}
 	}
@@ -151,6 +163,12 @@ func (g *GameScene) digVertical(y1, y2, x int) {
 	}
 	for y := y1; y <= y2; y++ {
 		if g.worldMap[x][y] == Wall {
+			if x > 0 {
+				g.worldMap[x-1][y] = Wall
+			}
+			if x < mapWidth {
+				g.worldMap[x+1][y] = Wall
+			}
 			g.worldMap[x][y] = Floor
 		}
 	}

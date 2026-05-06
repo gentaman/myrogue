@@ -18,11 +18,11 @@ const (
 
 // GameScene はゲームプレイ画面を表す
 type GameScene struct {
-	worldMap [mapWidth][mapHeight]TileType
-	explored [mapWidth][mapHeight]bool // 一度でも視界に入ったタイル（静的要素を表示）
-	visible  [mapWidth][mapHeight]bool // 現在視界に入っているタイル（動的要素も表示）
-	mapSeed  int64                     // このフロアのマップ生成シード
-	playerX  int
+	worldMap    [mapWidth][mapHeight]TileType
+	explored    [mapWidth][mapHeight]bool // 一度でも視界に入ったタイル（静的要素を表示）
+	visible     [mapWidth][mapHeight]bool // 現在視界に入っているタイル（動的要素も表示）
+	mapSeed     int64                     // このフロアのマップ生成シード
+	playerX     int
 	playerY     int
 	playerHP    int
 	hasTreasure bool
@@ -74,7 +74,11 @@ func newGameSceneWithState(hp, turnCount, floor int, hasTreasure bool, fromBelow
 	case floor == maxFloor-1:
 		g.message = fmt.Sprintf("フロア %d / %d。宝を見つけて戻れ！", floor+1, maxFloor)
 	default:
-		g.message = fmt.Sprintf("フロア %d / %d。さらに深く潜れ！", floor+1, maxFloor)
+		if hasTreasure {
+			g.message = fmt.Sprintf("フロア %d / %d。入口に戻れ！", floor+1, maxFloor)
+		} else {
+			g.message = fmt.Sprintf("フロア %d / %d。さらに深く潜れ！", floor+1, maxFloor)
+		}
 	}
 	return g
 }

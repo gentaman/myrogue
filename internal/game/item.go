@@ -14,7 +14,7 @@ const (
 type ItemKind int
 
 const (
-	ItemHealSmall   ItemKind = iota
+	ItemHealSmall ItemKind = iota
 	ItemHealLarge
 	ItemRevealMap   // 取得したフロアでのみ使用可
 	ItemClairvoyant // どのフロアでも使用可、使用フロアのみ全探索
@@ -29,6 +29,7 @@ type itemDef struct {
 	desc       string
 	effectDesc string
 	weight     int
+	rarity     int // 大きいほど希少である。出現率に影響する
 	clr        color.RGBA
 	// floorBound が true のとき、取得フロアをスタック単位として管理し使用制限をかける
 	floorBound bool
@@ -51,6 +52,7 @@ var itemDefs = []itemDef{
 		desc:       "草を煎じた素朴な薬。飲むとHPが5回復する。軽くて持ち運びやすい。",
 		effectDesc: "HP +5",
 		weight:     2,
+		rarity:     1,
 		clr:        color.RGBA{100, 255, 150, 255},
 		effect: func(g *GameScene, _ InventoryEntry) {
 			g.playerHP += 5
@@ -65,6 +67,7 @@ var itemDefs = []itemDef{
 		desc:       "希少な霊草から作られた上質な薬。飲むとHPが10回復する。効果は高いが重い。",
 		effectDesc: "HP +10",
 		weight:     4,
+		rarity:     2,
 		clr:        color.RGBA{50, 220, 80, 255},
 		effect: func(g *GameScene, _ InventoryEntry) {
 			g.playerHP += 10
@@ -79,6 +82,7 @@ var itemDefs = []itemDef{
 		desc:       "特定のフロアの全体像が描かれた古い地図。取得したフロアでのみ使用できる。他のフロアに持ち込んでも使えない。",
 		effectDesc: "取得フロアのみ全探索",
 		weight:     1,
+		rarity:     1,
 		floorBound: true,
 		clr:        color.RGBA{255, 220, 80, 255},
 		canUse: func(g *GameScene, entry InventoryEntry) (bool, string) {
@@ -103,6 +107,7 @@ var itemDefs = []itemDef{
 		desc:       "遠く離れた場所を見通す不思議な薬。使ったフロアの全体が明らかになる。どのフロアでも使えるので、深い階層まで温存するのも手だ。",
 		effectDesc: "使用フロアのみ全探索",
 		weight:     2,
+		rarity:     3,
 		clr:        color.RGBA{100, 180, 255, 255},
 		effect: func(g *GameScene, _ InventoryEntry) {
 			for x := 0; x < mapWidth; x++ {
@@ -127,8 +132,8 @@ type MapItem struct {
 
 // InventoryEntry はインベントリの1エントリ
 type InventoryEntry struct {
-	kind         ItemKind
-	count        int
+	kind          ItemKind
+	count         int
 	obtainedSeed  int64 // floorBound アイテム用のマップ生成シード（それ以外は 0）
 	obtainedFloor int   // ラベル表示用フロア番号（floorBound アイテムのみ有効）
 }

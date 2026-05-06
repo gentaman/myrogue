@@ -103,8 +103,10 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 
 	// プレイヤー描画
 	playerClr := color.RGBA{255, 100, 100, 255}
+	dotClr := color.RGBA{255, 255, 255, 255}
 	if g.hasTreasure {
 		playerClr = color.RGBA{255, 255, 100, 255}
+		dotClr = color.RGBA{64, 64, 64, 255}
 	}
 	pox, poy, psz := charAnim(g.frame, g.playerAttackAnim, g.playerDir)
 	pRect := ebiten.NewImage(psz, psz)
@@ -112,7 +114,7 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 	pOp := &ebiten.DrawImageOptions{}
 	pOp.GeoM.Translate(float64(g.playerX*tileSize+pox), float64(g.playerY*tileSize+poy))
 	screen.DrawImage(pRect, pOp)
-	drawDirDot(screen, g.playerX, g.playerY, g.playerDir, color.RGBA{255, 255, 255, 255})
+	drawDirDot(screen, g.playerX, g.playerY, g.playerDir, dotClr)
 
 	// アクションメニュー
 	if g.menuOpen {

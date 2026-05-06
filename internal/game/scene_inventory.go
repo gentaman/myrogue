@@ -98,6 +98,14 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 func (s *InventoryScene) Update() (Scene, error) {
 	inv := s.game.inventory
 
+	// 説明ウィンドウ表示中
+	if s.subMenu == invSubDesc {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeySpace) {
+			s.subMenu = invSubNone
+		}
+		return nil, nil
+	}
+
 	// サブメニュー表示中
 	if s.subMenu != invSubNone {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
@@ -137,13 +145,6 @@ func (s *InventoryScene) Update() (Scene, error) {
 		return nil, nil
 	}
 
-	// 説明ウィンドウ表示中
-	if s.subMenu == invSubDesc {
-		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-			s.subMenu = invSubNone
-		}
-		return nil, nil
-	}
 
 	// メインリスト操作
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyI) {
