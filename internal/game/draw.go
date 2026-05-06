@@ -29,6 +29,28 @@ func drawDirDot(screen *ebiten.Image, tileX, tileY int, d Dir, clr color.Color) 
 	screen.DrawImage(dot, op)
 }
 
+func measureText(str string, face *text.GoTextFace) int {
+	w, _ := text.Measure(str, face, 0)
+	return int(w) + 1
+}
+
+// truncateText は str がmaxWidth px を超える場合に "…" を付けて切り詰める
+func truncateText(str string, face *text.GoTextFace, maxWidth int) string {
+	if measureText(str, face) <= maxWidth {
+		return str
+	}
+	const ellipsis = "…"
+	ellipsisW := measureText(ellipsis, face)
+	runes := []rune(str)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		if measureText(string(runes), face)+ellipsisW <= maxWidth {
+			return string(runes) + ellipsis
+		}
+	}
+	return ellipsis
+}
+
 func drawText(screen *ebiten.Image, str string, face *text.GoTextFace, x, y int, clr color.Color, center bool) {
 	op := &text.DrawOptions{}
 	if center {

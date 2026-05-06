@@ -1,8 +1,11 @@
 package game
 
+import "fmt"
+
 const (
 	menuKindAttack = iota
 	menuKindStairs
+	menuKindWait
 	menuKindItem
 	menuKindClose
 )
@@ -42,7 +45,12 @@ func (g *GameScene) buildMenu() {
 	if hasAdj {
 		attackLabel = "攻撃する"
 	} else {
-		attackLabel = "攻撃する（近くに敵なし）"
+		attackLabel = "攻撃する（正面に敵なし）"
+	}
+
+	itemLabel := fmt.Sprintf("アイテムを使う（重量: %d/%d）", g.currentWeight(), maxCarryWeight)
+	if len(g.inventory) == 0 {
+		itemLabel = "アイテムを使う（所持なし）"
 	}
 
 	var stairLabel string
@@ -64,6 +72,8 @@ func (g *GameScene) buildMenu() {
 	g.menuItems = []actionItem{
 		{label: attackLabel, enabled: hasAdj, kind: menuKindAttack},
 		{label: stairLabel, enabled: stair != Wall && (stair != Stairs || g.hasTreasure), kind: menuKindStairs},
+		{label: itemLabel, enabled: len(g.inventory) > 0, kind: menuKindItem},
+		{label: "待機する（1ターン消費）", enabled: true, kind: menuKindWait},
 		{label: "閉じる", enabled: true, kind: menuKindClose},
 	}
 	if g.menuCursor >= len(g.menuItems) {
@@ -82,6 +92,7 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 	case menuKindAttack:
 		ex, ey, _ := g.adjacentEnemy()
 		g.turnCount++
+		g.playerAttackAnim = attackAnimFrames
 		g.attackEnemy(ex, ey)
 		g.moveEnemies()
 		if g.playState == StateDead {
@@ -93,6 +104,16 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 		if next, err := g.checkTile(); next != nil || err != nil {
 			return next, err
 		}
+		g.moveEnemies()
+		if g.playState == StateDead {
+			return nil, nil
+		}
+		g.trySpawnEnemyPerTurn()
+	case menuKindItem:
+		return &InventoryScene{game: g}, nil
+	case menuKindWait:
+		g.turnCount++
+		g.message = "待機した。"
 		g.moveEnemies()
 		if g.playState == StateDead {
 			return nil, nil

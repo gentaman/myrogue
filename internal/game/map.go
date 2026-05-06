@@ -26,7 +26,9 @@ func (r Room) centerX() int { return r.x + r.w/2 }
 func (r Room) centerY() int { return r.y + r.h/2 }
 
 func (g *GameScene) generateMap() {
-	rand.Seed(time.Now().UnixNano())
+	seed := time.Now().UnixNano()
+	g.mapSeed = seed
+	rng := rand.New(rand.NewSource(seed))
 
 	for x := 0; x < mapWidth; x++ {
 		for y := 0; y < mapHeight; y++ {
@@ -35,10 +37,10 @@ func (g *GameScene) generateMap() {
 	}
 
 	for attempt := 0; len(g.rooms) < 5 && attempt < 200; attempt++ {
-		w := rand.Intn(6) + 4
-		h := rand.Intn(6) + 4
-		x := rand.Intn(mapWidth-w-2) + 1
-		y := rand.Intn(mapHeight-h-2) + 1
+		w := rng.Intn(6) + 4
+		h := rng.Intn(6) + 4
+		x := rng.Intn(mapWidth-w-2) + 1
+		y := rng.Intn(mapHeight-h-2) + 1
 
 		// 既存の部屋と1マスのマージンを含めて重複しないか確認
 		overlaps := false
@@ -61,13 +63,12 @@ func (g *GameScene) generateMap() {
 	}
 
 	for i := 1; i < len(g.rooms); i++ {
-		g.digCorridor(g.rooms[i-1].centerX(), g.rooms[i-1].centerY(), g.rooms[i].centerX(), g.rooms[i].centerY())
+		g.digCorridor(rng, g.rooms[i-1].centerX(), g.rooms[i-1].centerY(), g.rooms[i].centerX(), g.rooms[i].centerY())
 	}
 
 	if len(g.rooms) > 0 {
 		g.playerX = g.rooms[0].centerX()
 		g.playerY = g.rooms[0].centerY()
-		// フロア0のみ上り出口（Stairs）を配置、それ以外は上り階段（StairsUp）
 		if g.floor == 0 {
 			g.worldMap[g.playerX][g.playerY] = Stairs
 		} else {
@@ -78,8 +79,8 @@ func (g *GameScene) generateMap() {
 	// 最下層のみ宝を配置
 	if g.floor == maxFloor-1 {
 		for {
-			tx := rand.Intn(mapWidth)
-			ty := rand.Intn(mapHeight)
+			tx := rng.Intn(mapWidth)
+			ty := rng.Intn(mapHeight)
 			if g.worldMap[tx][ty] == Floor {
 				g.worldMap[tx][ty] = Treasure
 				break
@@ -90,11 +91,10 @@ func (g *GameScene) generateMap() {
 	// 最下層以外は下り階段を配置（上り階段のある rooms[0] 以外の部屋に限定）
 	if g.floor < maxFloor-1 && len(g.rooms) >= 2 {
 		for attempt := 0; attempt < 200; attempt++ {
-			// rooms[1] 以降からランダムに選ぶ
-			roomIdx := 1 + rand.Intn(len(g.rooms)-1)
+			roomIdx := 1 + rng.Intn(len(g.rooms)-1)
 			r := g.rooms[roomIdx]
-			dx := r.x + rand.Intn(r.w)
-			dy := r.y + rand.Intn(r.h)
+			dx := r.x + rng.Intn(r.w)
+			dy := r.y + rng.Intn(r.h)
 			if g.worldMap[dx][dy] == Floor {
 				g.worldMap[dx][dy] = StairsDown
 				break
@@ -103,10 +103,29 @@ func (g *GameScene) generateMap() {
 	}
 
 	g.maxEnemies = len(g.rooms)
+
+	// 各部屋に確率でアイテムを配置（プレイヤー開始部屋を除く）
+	for i, r := range g.rooms {
+		if i == 0 {
+			continue
+		}
+		if rng.Intn(2) == 0 {
+			for attempt := 0; attempt < 30; attempt++ {
+				ix := r.x + rng.Intn(r.w)
+				iy := r.y + rng.Intn(r.h)
+				if g.worldMap[ix][iy] != Floor {
+					continue
+				}
+				kind := ItemKind(rng.Intn(int(itemKindCount)))
+				g.mapItems = append(g.mapItems, MapItem{x: ix, y: iy, kind: kind, obtainedSeed: g.mapSeed, obtainedFloor: g.floor})
+				break
+			}
+		}
+	}
 }
 
-func (g *GameScene) digCorridor(x1, y1, x2, y2 int) {
-	if rand.Intn(2) == 0 {
+func (g *GameScene) digCorridor(rng *rand.Rand, x1, y1, x2, y2 int) {
+	if rng.Intn(2) == 0 {
 		g.digHorizontal(x1, x2, y1)
 		g.digVertical(y1, y2, x2)
 	} else {

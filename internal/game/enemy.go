@@ -28,10 +28,20 @@ func (d Dir) delta() (int, int) {
 	}
 }
 
+// EnemyState は敵の警戒状態を表す
+type EnemyState int
+
+const (
+	EnemyIdle    EnemyState = iota // プレイヤーに気づいていない
+	EnemyAlerted                   // プレイヤーを発見・追跡中
+)
+
 // Enemy は敵キャラクターを表す
 type Enemy struct {
-	x, y int
-	dir  Dir
+	x, y       int
+	dir        Dir
+	attackAnim int        // 攻撃アニメ残りフレーム数
+	state      EnemyState // 警戒状態
 }
 
 func (g *GameScene) isEnemyAt(x, y int) bool {
@@ -165,6 +175,7 @@ func (g *GameScene) moveEnemies() {
 		// 正面にプレイヤーがいるなら攻撃（移動より先に判定）
 		fdx, fdy := e.dir.delta()
 		if e.x+fdx == g.playerX && e.y+fdy == g.playerY {
+			e.attackAnim = attackAnimFrames
 			g.playerHP--
 			playSFXHit()
 			if g.playerHP <= 0 {
@@ -176,12 +187,19 @@ func (g *GameScene) moveEnemies() {
 			continue
 		}
 
-		var nx, ny int
+		// 視界チェックでステートを更新
 		if g.canSeePlayer(e) {
-			// 視界あり: BFS 最短経路の次の1マスへ
+			e.state = EnemyAlerted
+		} else {
+			e.state = EnemyIdle
+		}
+
+		var nx, ny int
+		if e.state == EnemyAlerted {
+			// 警戒中: BFS 最短経路の次の1マスへ
 			nx, ny = g.bfsNextStep(e.x, e.y, g.playerX, g.playerY)
 		} else {
-			// 視界なし: ランダム移動（通行可能なマスから選ぶ）
+			// 未発見: ランダム移動（通行可能なマスから選ぶ）
 			candidates := dirList
 			rand.Shuffle(len(candidates), func(a, b int) { candidates[a], candidates[b] = candidates[b], candidates[a] })
 			nx, ny = e.x, e.y
