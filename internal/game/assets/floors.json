@@ -12,7 +12,8 @@
       { "id": "heal_small", "weight": 60 },
       { "id": "weapon_wood", "weight": 20 },
       { "id": "reveal_map", "weight": 15 },
-      { "id": "fireball_cane", "weight": 15 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 },
       { "id": "shield_wood", "weight": 20 }
     ]
   },
@@ -32,7 +33,8 @@
       { "id": "weapon_iron", "weight": 15 },
       { "id": "shield_iron", "weight": 15 },
       { "id": "reveal_map", "weight": 15 },
-      { "id": "fireball_cane", "weight": 15 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 },
       { "id": "armor_wood", "weight": 20 }
     ]
   },
@@ -52,7 +54,8 @@
       { "id": "weapon_iron", "weight": 15 },
       { "id": "shield_iron", "weight": 15 },
       { "id": "clairvoyant", "weight": 10 },
-      { "id": "fireball_cane", "weight": 15 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 },
       { "id": "armor_wood", "weight": 20 }
     ]
   },
@@ -72,7 +75,8 @@
       { "id": "weapon_iron", "weight": 20 },
       { "id": "shield_iron", "weight": 20 },
       { "id": "clairvoyant", "weight": 10 },
-      { "id": "fireball_cane", "weight": 15 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 },
       { "id": "armor_iron", "weight": 20 }
     ]
   }

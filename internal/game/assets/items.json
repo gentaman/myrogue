@@ -143,7 +143,7 @@
     }
   },
   {
-    "id": "fireball_cane",
+    "id": "fireball",
     "name": "火炎の杖",
     "desc": "火を噴く杖。MPを消費して正面の敵を焼き払う。",
     "effect_desc": "MP -3  正面の敵にダメージ",
@@ -156,5 +156,18 @@
       "damage": 5,
       "message": "炎が敵を包み込んだ！"
     }
+  },
+  {
+    "id": "goddess_statue",
+    "name": "木彫りの女神",
+    "desc": "小さな女神の像。祈りを捧げると癒やしの光が溢れる。",
+    "effect_desc": "信仰心でHP回復",
+    "weight": 2,
+    "rarity": 2,
+    "color": "#FFD700",
+    "effect": {
+      "type": "heal_faith",
+      "message": "女神の光が体を包み、HPが%d回復した！"
+    }
   }
-]
+  ]

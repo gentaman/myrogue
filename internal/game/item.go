@@ -167,10 +167,20 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 	case "heal":
 		return func(g *GameScene, _ int) {
 			g.playerHP += spec.Amount
-			if g.playerHP > playerMaxHP {
-				g.playerHP = playerMaxHP
+			if g.playerHP > playerMaxHP+g.Vit*2 {
+				g.playerHP = playerMaxHP + g.Vit*2
 			}
 			g.pushMessage(spec.Message)
+		}
+	case "heal_faith":
+		return func(g *GameScene, _ int) {
+			heal := 5 + g.Fai*2
+			g.playerHP += heal
+			maxHP := playerMaxHP + g.Vit*2
+			if g.playerHP > maxHP {
+				g.playerHP = maxHP
+			}
+			g.pushMessage(fmt.Sprintf(spec.Message, heal))
 		}
 	case "reveal_map":
 		return func(g *GameScene, _ int) {
