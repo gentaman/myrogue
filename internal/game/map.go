@@ -1,6 +1,9 @@
 package game
 
 import (
+	_ "embed"
+	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -127,10 +130,40 @@ func (l *bspLeaf) getRoom() *Room {
 	return nil
 }
 
+type poolEntry struct {
+	ID     string `json:"id"`
+	Weight int    `json:"weight"`
+}
+
+type floorDef struct {
+	Floor      int         `json:"floor"`
+	MinRooms   int         `json:"min_rooms"`
+	MaxRooms   int         `json:"max_rooms"`
+	EnemyCount int         `json:"enemy_count"`
+	ItemCount  int         `json:"item_count"`
+	EnemyPool  []poolEntry `json:"enemy_pool"`
+	ItemPool   []poolEntry `json:"item_pool"`
+}
+
+var (
+	//go:embed assets/floors.json
+	floorsJSON []byte
+
+	floorDefs []floorDef
+)
+
+func init() {
+	if err := json.Unmarshal(floorsJSON, &floorDefs); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal floors.json: %v", err))
+	}
+}
+
 func (g *GameScene) generateMap() {
 	seed := time.Now().UnixNano()
 	g.mapSeed = seed
 	rng := rand.New(rand.NewSource(seed))
+
+	fDef := &floorDefs[g.floor]
 
 	for x := 0; x < mapWidth; x++ {
 		for y := 0; y < mapHeight; y++ {
@@ -144,13 +177,15 @@ func (g *GameScene) generateMap() {
 	root := &bspLeaf{0, 0, mapWidth, mapHeight, nil, nil, nil}
 	leaves := []*bspLeaf{root}
 
+	// 分割回数を調整して部屋数を制御
 	didSplit := true
-	for didSplit {
+	for didSplit && len(leaves) < fDef.MaxRooms {
 		didSplit = false
 		newLeaves := []*bspLeaf{}
 		for _, l := range leaves {
 			if l.left == nil && l.right == nil {
-				if l.w > minLeafSize*2 || l.h > minLeafSize*2 || rng.Float64() > 0.25 {
+				// 部屋数が足りないか、確率で分割
+				if len(leaves)+len(newLeaves) < fDef.MinRooms || rng.Float64() > 0.3 {
 					if l.split(rng) {
 						newLeaves = append(newLeaves, l.left, l.right)
 						didSplit = true
@@ -175,7 +210,7 @@ func (g *GameScene) generateMap() {
 	}
 
 	// 最下層のみ宝を配置
-	if g.floor == maxFloor-1 {
+	if g.floor == len(floorDefs)-1 {
 		for {
 			tx := rng.Intn(mapWidth)
 			ty := rng.Intn(mapHeight)
@@ -187,7 +222,7 @@ func (g *GameScene) generateMap() {
 	}
 
 	// 最下層以外は下り階段を配置（上り階段のある rooms[0] 以外の部屋に限定）
-	if g.floor < maxFloor-1 && len(g.rooms) >= 2 {
+	if g.floor < len(floorDefs)-1 && len(g.rooms) >= 2 {
 		for attempt := 0; attempt < 200; attempt++ {
 			roomIdx := 1 + rng.Intn(len(g.rooms)-1)
 			r := g.rooms[roomIdx]
@@ -200,30 +235,31 @@ func (g *GameScene) generateMap() {
 		}
 	}
 
-	g.maxEnemies = len(g.rooms)
+	g.maxEnemies = fDef.EnemyCount
 
-	weights := []int{}
-
-	for i := 0; i < int(itemKindCount)-1; i++ {
-		weights = append(weights, -itemDefs[i].rarity)
+	// アイテム配置
+	itemWeights := make([]int, len(fDef.ItemPool))
+	for i, entry := range fDef.ItemPool {
+		itemWeights[i] = entry.Weight
 	}
 
-	// 各部屋に確率でアイテムを配置
-	for _, r := range g.rooms {
-		if rng.Intn(2) == 0 {
-			for attempt := 0; attempt < 30; attempt++ {
-				ix := r.x + rng.Intn(r.w)
-				iy := r.y + rng.Intn(r.h)
-				if g.worldMap[ix][iy] != Floor {
-					continue
-				}
-				idx := weightedChoice(rng, itemDefs, weights)
-				if idx >= 0 {
-					kind := ItemKind(idx)
-					g.mapItems = append(g.mapItems, MapItem{x: ix, y: iy, kind: kind, obtainedSeed: g.mapSeed, obtainedFloor: g.floor})
-				}
-				break
+	for i := 0; i < fDef.ItemCount; i++ {
+		for attempt := 0; attempt < 100; attempt++ {
+			roomIdx := rng.Intn(len(g.rooms))
+			r := g.rooms[roomIdx]
+			ix := r.x + rng.Intn(r.w)
+			iy := r.y + rng.Intn(r.h)
+			if g.worldMap[ix][iy] != Floor || g.nearSpecialTile(ix, iy) {
+				continue
 			}
+
+			poolIdx := weightedChoice(rng, fDef.ItemPool, itemWeights)
+			if poolIdx >= 0 {
+				itemID := fDef.ItemPool[poolIdx].ID
+				kind := itemIDMap[itemID]
+				g.mapItems = append(g.mapItems, MapItem{x: ix, y: iy, kind: kind, obtainedSeed: g.mapSeed, obtainedFloor: g.floor})
+			}
+			break
 		}
 	}
 }
@@ -244,12 +280,6 @@ func (g *GameScene) digHorizontal(x1, x2, y int) {
 	}
 	for x := x1; x <= x2; x++ {
 		if g.worldMap[x][y] == Wall {
-			if y > 0 {
-				g.worldMap[x][y-1] = Wall
-			}
-			if y < mapHeight-1 {
-				g.worldMap[x][y+1] = Wall
-			}
 			g.worldMap[x][y] = Floor
 		}
 	}
@@ -261,12 +291,6 @@ func (g *GameScene) digVertical(y1, y2, x int) {
 	}
 	for y := y1; y <= y2; y++ {
 		if g.worldMap[x][y] == Wall {
-			if x > 0 {
-				g.worldMap[x-1][y] = Wall
-			}
-			if x < mapWidth-1 {
-				g.worldMap[x+1][y] = Wall
-			}
 			g.worldMap[x][y] = Floor
 		}
 	}
@@ -326,6 +350,16 @@ func (g *GameScene) trySpawnEnemyPerTurn() {
 
 // プレイヤーと同じ部屋以外の床にランダムに1体生成
 func (g *GameScene) trySpawnEnemy(playerRoomIdx int) {
+	fDef := &floorDefs[g.floor]
+	if len(fDef.EnemyPool) == 0 {
+		return
+	}
+
+	weights := make([]int, len(fDef.EnemyPool))
+	for i, entry := range fDef.EnemyPool {
+		weights[i] = entry.Weight
+	}
+
 	for attempt := 0; attempt < 50; attempt++ {
 		roomIdx := rand.Intn(len(g.rooms))
 		if roomIdx == playerRoomIdx {
@@ -343,7 +377,20 @@ func (g *GameScene) trySpawnEnemy(playerRoomIdx int) {
 		if g.isEnemyAt(ex, ey) {
 			continue
 		}
-		g.enemies = append(g.enemies, Enemy{x: ex, y: ey})
+
+		// 敵の種類を決定
+		rng := rand.New(rand.NewSource(time.Now().UnixNano() + int64(attempt)))
+		poolIdx := weightedChoice(rng, fDef.EnemyPool, weights)
+		enemyID := fDef.EnemyPool[poolIdx].ID
+		kindIdx := enemyIDMap[enemyID]
+		def := &enemyDefs[kindIdx]
+
+		g.enemies = append(g.enemies, Enemy{
+			x:    ex,
+			y:    ey,
+			hp:   def.hp,
+			kind: kindIdx,
+		})
 		return
 	}
 }

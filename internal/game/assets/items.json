@@ -1,0 +1,160 @@
+[
+  {
+    "id": "heal_small",
+    "name": "回復薬（小）",
+    "desc": "草を煎じた素朴な薬。飲むとHPが5回復する。軽くて持ち運びやすい。",
+    "effect_desc": "HP +5",
+    "weight": 2,
+    "rarity": 1,
+    "color": "#64FF96",
+    "effect": {
+      "type": "heal",
+      "amount": 5,
+      "message": "回復薬（小）を使った！ HP +5"
+    }
+  },
+  {
+    "id": "heal_large",
+    "name": "回復薬（大）",
+    "desc": "希少な霊草から作られた上質な薬。飲むとHPが10回復する。効果は高いが重い。",
+    "effect_desc": "HP +10",
+    "weight": 4,
+    "rarity": 2,
+    "color": "#32DC50",
+    "effect": {
+      "type": "heal",
+      "amount": 10,
+      "message": "回復薬（大）を使った！ HP +10"
+    }
+  },
+  {
+    "id": "reveal_map",
+    "name": "フロアの地図",
+    "desc": "特定のフロアの全体像が描かれた古い地図。取得したフロアでのみ使用できる。他のフロアに持ち込んでも使えない。",
+    "effect_desc": "取得フロアのみ全探索",
+    "weight": 1,
+    "rarity": 1,
+    "color": "#FFDC50",
+    "floor_bound": true,
+    "can_use": {
+      "type": "check_same_floor",
+      "message": "この地図はフロア%dでしか使えない。"
+    },
+    "effect": {
+      "type": "reveal_map",
+      "message": "フロアの地図を使った！このフロアの全体が明らかになった。"
+    }
+  },
+  {
+    "id": "clairvoyant",
+    "name": "千里眼の薬",
+    "desc": "遠く離れた場所を見通す不思議な薬。使ったフロアの全体が明らかになる。どのフロアでも使えるので、深い階層まで温存するのも手だ。",
+    "effect_desc": "使用フロアのみ全探索",
+    "weight": 2,
+    "rarity": 3,
+    "color": "#64B4FF",
+    "effect": {
+      "type": "reveal_map",
+      "message": "千里眼の薬を飲んだ！フロア%dの全体が明らかになった。"
+    }
+  },
+  {
+    "id": "weapon_wood",
+    "name": "木の棒",
+    "desc": "その辺に落ちていた手頃な木の棒。素手よりはましだ。",
+    "effect_desc": "攻撃力 +1",
+    "weight": 3,
+    "rarity": 1,
+    "color": "#A0522D",
+    "effect": {
+      "type": "equip",
+      "equip_type": "weapon",
+      "atk": 1
+    }
+  },
+  {
+    "id": "weapon_iron",
+    "name": "鉄の剣",
+    "desc": "鍛冶屋が打ち出した鋭い剣。高い攻撃力を持つ。",
+    "effect_desc": "攻撃力 +3",
+    "weight": 5,
+    "rarity": 3,
+    "color": "#C0C0C0",
+    "effect": {
+      "type": "equip",
+      "equip_type": "weapon",
+      "atk": 3
+    }
+  },
+  {
+    "id": "shield_wood",
+    "name": "木の盾",
+    "desc": "木板を張り合わせただけの粗末な盾。少しは身を守れる。",
+    "effect_desc": "防御力 +1",
+    "weight": 3,
+    "rarity": 1,
+    "color": "#8B4513",
+    "effect": {
+      "type": "equip",
+      "equip_type": "shield",
+      "def": 1
+    }
+  },
+  {
+    "id": "shield_iron",
+    "name": "鉄の盾",
+    "desc": "頑丈な鉄板で作られた盾。多くの攻撃を弾き返す。",
+    "effect_desc": "防御力 +3",
+    "weight": 6,
+    "rarity": 3,
+    "color": "#A9A9A9",
+    "effect": {
+      "type": "equip",
+      "equip_type": "shield",
+      "def": 3
+    }
+  },
+  {
+    "id": "armor_wood",
+    "name": "木の鎧",
+    "desc": "薄い木板を繋ぎ合わせた鎧。動きにくいが防御力は上がる。",
+    "effect_desc": "防御力 +1",
+    "weight": 4,
+    "rarity": 2,
+    "color": "#DEB887",
+    "effect": {
+      "type": "equip",
+      "equip_type": "armor",
+      "def": 1
+    }
+  },
+  {
+    "id": "armor_iron",
+    "name": "鉄の鎧",
+    "desc": "重厚な鉄のプレートを組み合わせた鎧。圧倒的な防御力を誇るが、非常に重い。",
+    "effect_desc": "防御力 +3",
+    "weight": 8,
+    "rarity": 4,
+    "color": "#708090",
+    "effect": {
+      "type": "equip",
+      "equip_type": "armor",
+      "def": 3
+    }
+  },
+  {
+    "id": "fireball_cane",
+    "name": "火炎の杖",
+    "desc": "火を噴く杖。MPを消費して正面の敵を焼き払う。",
+    "effect_desc": "MP -3  正面の敵にダメージ",
+    "weight": 3,
+    "rarity": 3,
+    "color": "#FF4500",
+    "effect": {
+      "type": "fireball",
+      "cost": 3,
+      "damage": 5,
+      "message": "炎が敵を包み込んだ！"
+    }
+  }
+]

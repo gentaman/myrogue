@@ -13,11 +13,15 @@ func weightedChoice[T any](rng *rand.Rand, items []T, weights []int) int {
 
 	minW := slices.Min(weights)
 
+	if minW < 0 {
+		return -1
+	}
+
 	// 1. 累積和の配列を作成
 	sums := make([]int, len(weights))
 	runningSum := 0
 	for i, w := range weights {
-		runningSum += w - minW + 1
+		runningSum += w
 		sums[i] = runningSum
 	}
 

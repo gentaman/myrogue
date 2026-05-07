@@ -1,0 +1,42 @@
+[
+  {
+    "id": "slime",
+    "name": "スライム",
+    "hp": 2,
+    "atk": 1,
+    "rarity": 1,
+    "xp": 5,
+    "color": "#78FF78",
+    "floor_min": 0
+  },
+  {
+    "id": "goblin",
+    "name": "ゴブリン",
+    "hp": 3,
+    "atk": 2,
+    "rarity": 2,
+    "xp": 10,
+    "color": "#C8FF00",
+    "floor_min": 0
+  },
+  {
+    "id": "orc",
+    "name": "オーク",
+    "hp": 6,
+    "atk": 3,
+    "rarity": 3,
+    "xp": 25,
+    "color": "#009600",
+    "floor_min": 1
+  },
+  {
+    "id": "dragon",
+    "name": "ドラゴン",
+    "hp": 15,
+    "atk": 5,
+    "rarity": 5,
+    "xp": 100,
+    "color": "#FF0000",
+    "floor_min": 2
+  }
+  ]

@@ -84,21 +84,31 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		if !g.visible[e.x][e.y] {
 			continue
 		}
+		def := &enemyDefs[e.kind]
 		ox, oy, sz := charAnim(g.frame, e.attackAnim, e.dir)
 		eRect := ebiten.NewImage(sz, sz)
-		var eClr, eDotClr color.RGBA
-		if e.state == EnemyAlerted {
-			eClr = color.RGBA{220, 50, 50, 255}
-			eDotClr = color.RGBA{255, 180, 180, 255}
-		} else {
-			eClr = color.RGBA{120, 80, 160, 255}
-			eDotClr = color.RGBA{200, 170, 230, 255}
-		}
+
+		eClr := def.clr
 		eRect.Fill(eClr)
 		eOp := &ebiten.DrawImageOptions{}
 		eOp.GeoM.Translate(float64(e.x*tileSize+ox), float64(e.y*tileSize+oy))
 		screen.DrawImage(eRect, eOp)
-		drawDirDot(screen, e.x, e.y, e.dir, eDotClr)
+
+		// 向きドットの描画（警戒時は赤系で激しく点滅）
+		var dotClr color.RGBA
+		if e.state == EnemyAlerted {
+			// 10フレーム周期で点滅
+			if (g.frame/5)%2 == 0 {
+				dotClr = color.RGBA{255, 50, 50, 255}
+			} else {
+				dotClr = color.RGBA{255, 200, 200, 255}
+			}
+		} else {
+			// 通常時は白系でゆるやかに明滅
+			alpha := uint8(180 + 40*(g.frame/30%2))
+			dotClr = color.RGBA{255, 255, 255, alpha}
+		}
+		drawDirDot(screen, e.x, e.y, e.dir, dotClr)
 	}
 
 	// プレイヤー描画
@@ -212,11 +222,37 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		drawText(screen, "Enter/Y: はい    Esc/N: いいえ", fontFace12, screenWidth/2, dY+46, color.RGBA{180, 180, 180, 255}, true)
 	}
 
+	// ゲームオーバー（勝利・敗北）ダイアログ
+	if g.playState == StateWin || g.playState == StateDead {
+		const (
+			dW = 360
+			dH = 120
+			dX = (screenWidth - dW) / 2
+			dY = (mapHeight*tileSize - dH) / 2
+		)
+		var pClr, bClr color.RGBA
+		var title, sub string
+		if g.playState == StateWin {
+			pClr = color.RGBA{20, 40, 20, 255}
+			bClr = color.RGBA{100, 255, 100, 255}
+			title = "--- BEAT THE GAME ---"
+			sub = fmt.Sprintf("スコア: %d (ターン: %d / HP: %d)", g.calcScore(), g.turnCount, g.playerHP)
+		} else {
+			pClr = color.RGBA{40, 20, 20, 255}
+			bClr = color.RGBA{255, 100, 100, 255}
+			title = "--- GAME OVER ---"
+			sub = "あなたはダンジョンで力尽きた..."
+		}
+		drawPanel(screen, dX, dY, dW, dH, pClr, bClr)
+		drawText(screen, title, fontFace14, screenWidth/2, dY+20, bClr, true)
+		drawText(screen, sub, fontFace12, screenWidth/2, dY+55, color.RGBA{220, 220, 220, 255}, true)
+		drawText(screen, "R: 再挑戦    Esc: タイトルへ", fontFace12, screenWidth/2, dY+dH-25, color.RGBA{180, 180, 180, 255}, true)
+	}
+
 	// UIステータスバー（mapHeight*tileSize 以下の80px帯）
 	// 行1 (y+0):  フロア/ターン（左）  キーヒント（右）
 	// 行2 (y+16): HP  重量（左）
 	// 行3 (y+40): メッセージ
-	// 行4 (y+60): Win/Dead ヒント
 	statusY := mapHeight*tileSize + 8
 
 	hpClr := color.RGBA{200, 200, 200, 255}
@@ -224,21 +260,13 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		hpClr = color.RGBA{255, 80, 80, 255}
 	}
 	wt := g.currentWeight()
-	wtClr := color.RGBA{200, 200, 200, 255}
-	if wt >= maxCarryWeight {
-		wtClr = color.RGBA{255, 100, 100, 255}
-	}
 
 	drawText(screen, fmt.Sprintf("フロア: %d  ターン: %d", g.floor+1, g.turnCount), fontFace12, 8, statusY, color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("HP: %d / %d", g.playerHP, playerMaxHP), fontFace12, 8, statusY+16, hpClr, false)
-	drawText(screen, fmt.Sprintf("重量: %d / %d  アイテム: %d", wt, maxCarryWeight, len(g.inventory)), fontFace12, 160, statusY+16, wtClr, false)
-	drawText(screen, g.message, fontFace14, 8, statusY+36, color.RGBA{255, 255, 255, 255}, false)
+	drawText(screen, fmt.Sprintf("Lv: %d  XP: %d / %d", g.Level, g.XP, g.XPToNext), fontFace12, 160, statusY, color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("HP: %d / %d  MP: %d / %d", g.playerHP, playerMaxHP+g.Vit*2, g.MP, g.MaxMP), fontFace12, 8, statusY+16, hpClr, false)
+	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d  アイテム: %d", 1+g.Str+g.equippedAtk(), g.equippedDef()+g.Vit, wt, maxCarryWeight, len(g.inventory)), fontFace12, 160, statusY+16, color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), fontFace12, 8, statusY+32, color.RGBA{150, 150, 150, 255}, false)
+	drawText(screen, g.message, fontFace14, 8, statusY+48, color.RGBA{255, 255, 255, 255}, false)
 
-	if g.playState == StateWin {
-		drawText(screen, "R: 再挑戦 / Esc: タイトルへ", fontFace12, 8, statusY+60, color.RGBA{150, 255, 150, 255}, false)
-	} else if g.playState == StateDead {
-		drawText(screen, "R: 再挑戦 / Esc: タイトルへ", fontFace12, 8, statusY+60, color.RGBA{255, 100, 100, 255}, false)
-	} else {
-		drawText(screen, "X: アクション / I: アイテム / H: ヘルプ / Esc: タイトル", fontFace12, screenWidth-390, statusY, color.RGBA{100, 100, 100, 255}, false)
-	}
+	drawText(screen, "H: ヘルプ", fontFace12, screenWidth-80, statusY, color.RGBA{100, 100, 100, 255}, false)
 }

@@ -2,6 +2,9 @@ package game
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
@@ -25,9 +28,16 @@ type GameScene struct {
 	playerX     int
 	playerY     int
 	playerHP    int
+	MP          int
+	MaxMP       int
+	Level       int
+	XP          int
+	XPToNext    int
+	Str, Wis, Fai, Vit, Agi, Luk int
 	hasTreasure bool
 	playState   PlayState
 	message     string
+	messageLog  []string
 	turnCount   int
 	enemies     []Enemy
 	rooms       []Room
@@ -49,11 +59,30 @@ type GameScene struct {
 }
 
 func NewGameScene() *GameScene {
-	return newGameSceneWithState(20, 0, 0, false, false, nil)
+	// 初期ステータス（ベースはすべて1）
+	return newGameSceneWithState(20, 0, 0, false, false, nil, nil, 1, 0, 10, 1, 1, 1, 1, 1, 1)
 }
 
-func newGameSceneWithState(hp, turnCount, floor int, hasTreasure bool, fromBelow bool, inventory []InventoryEntry) *GameScene {
-	g := &GameScene{playerHP: hp, turnCount: turnCount, floor: floor, hasTreasure: hasTreasure, inventory: inventory}
+func newGameSceneWithState(hp, turnCount, floor int, hasTreasure bool, fromBelow bool, inventory []InventoryEntry, log []string, level, xp, nextXP, str, wis, fai, vit, agi, luk int) *GameScene {
+	g := &GameScene{
+		playerHP:    hp,
+		MaxMP:       5 + wis*5,
+		MP:          5 + wis*5,
+		turnCount:   turnCount,
+		floor:       floor,
+		hasTreasure: hasTreasure,
+		inventory:   inventory,
+		messageLog:  log,
+		Level:       level,
+		XP:          xp,
+		XPToNext:    nextXP,
+		Str:         str,
+		Wis:         wis,
+		Fai:         fai,
+		Vit:         vit,
+		Agi:         agi,
+		Luk:         luk,
+	}
 	g.generateMap()
 	// 上り階段で戻った場合、プレイヤーを下り階段の位置に配置
 	if fromBelow {
@@ -70,17 +99,63 @@ func newGameSceneWithState(hp, turnCount, floor int, hasTreasure bool, fromBelow
 	g.spawnInitialEnemies()
 	switch {
 	case floor == 0:
-		g.message = fmt.Sprintf("フロア %d / %d。下り階段を探せ！", floor+1, maxFloor)
-	case floor == maxFloor-1:
-		g.message = fmt.Sprintf("フロア %d / %d。宝を見つけて戻れ！", floor+1, maxFloor)
+		g.pushMessage(fmt.Sprintf("フロア %d / %d。下り階段を探せ！", floor+1, len(floorDefs)))
+	case floor == len(floorDefs)-1:
+		g.pushMessage(fmt.Sprintf("フロア %d / %d。宝を見つけて戻れ！", floor+1, len(floorDefs)))
 	default:
 		if hasTreasure {
-			g.message = fmt.Sprintf("フロア %d / %d。入口に戻れ！", floor+1, maxFloor)
+			g.pushMessage(fmt.Sprintf("フロア %d / %d。入口に戻れ！", floor+1, len(floorDefs)))
 		} else {
-			g.message = fmt.Sprintf("フロア %d / %d。さらに深く潜れ！", floor+1, maxFloor)
+			g.pushMessage(fmt.Sprintf("フロア %d / %d。さらに深く潜れ！", floor+1, len(floorDefs)))
 		}
 	}
 	return g
+}
+
+func (g *GameScene) gainXP(amount int) {
+	if g.Level >= 100 {
+		return
+	}
+	g.XP += amount
+	g.pushMessage(fmt.Sprintf("%d の経験値を獲得！", amount))
+	for g.XP >= g.XPToNext && g.Level < 100 {
+		g.XP -= g.XPToNext
+		g.Level++
+		// 10 * (level ^ 1.5)
+		g.XPToNext = int(10 * math.Pow(float64(g.Level), 1.5))
+		g.pushMessage(fmt.Sprintf("レベル %d に上がった！", g.Level))
+		
+		// ステータス上昇
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		g.rollStatsUp(rng)
+	}
+}
+
+func (g *GameScene) rollStatsUp(rng *rand.Rand) {
+	// 1-3個のステータスが上昇
+	count := rng.Intn(3) + 1
+	for i := 0; i < count; i++ {
+		stat := rng.Intn(6)
+		switch stat {
+		case 0: g.Str++; g.pushMessage("力が少し上がった！")
+		case 1: g.Wis++; g.pushMessage("知恵が少し上がった！")
+		case 2: g.Fai++; g.pushMessage("信仰心が少し上がった！")
+		case 3: 
+			g.Vit++
+			g.playerHP += 2
+			g.pushMessage("生命力が少し上がった！")
+		case 4: g.Agi++; g.pushMessage("素早さが少し上がった！")
+		case 5: g.Luk++; g.pushMessage("運が少し上がった！")
+		}
+	}
+}
+
+func (g *GameScene) pushMessage(msg string) {
+	g.message = msg
+	g.messageLog = append(g.messageLog, msg)
+	if len(g.messageLog) > 1000 {
+		g.messageLog = g.messageLog[len(g.messageLog)-1000:]
+	}
 }
 
 func (g *GameScene) Update() (Scene, error) {
@@ -130,6 +205,9 @@ func (g *GameScene) Update() (Scene, error) {
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyI) {
 		return &InventoryScene{game: g}, nil
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
+		return &LogScene{game: g}, nil
 	}
 
 	// アクションメニュー
@@ -185,10 +263,6 @@ func (g *GameScene) Update() (Scene, error) {
 					g.playerX = newX
 					g.playerY = newY
 					g.updateVisibility()
-					g.pickupItem()
-					if next, err := g.checkTile(); next != nil || err != nil {
-						return next, err
-					}
 				}
 				// 敵のターン
 				g.moveEnemies()
@@ -253,31 +327,31 @@ func (g *GameScene) checkTile() (Scene, error) {
 	case Treasure:
 		g.hasTreasure = true
 		g.worldMap[g.playerX][g.playerY] = Floor
-		g.message = "宝を手に入れた！上の階段まで戻れ！"
+		g.pushMessage("宝を手に入れた！上の階段まで戻れ！")
 		playSFX(sfxCoinPCM)
 	case Stairs: // フロア0の出口：宝持参でクリア
 		if g.hasTreasure {
 			g.playState = StateWin
-			g.message = fmt.Sprintf("脱出成功！ スコア: %d（ターン: %d / HP: %d）", g.calcScore(), g.turnCount, g.playerHP)
+			g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d（ターン: %d / HP: %d）", g.calcScore(), g.turnCount, g.playerHP))
 			playSFX(sfxStairUpPCM)
 		} else {
-			g.message = "宝がない！まだ帰れない。"
+			g.pushMessage("宝がない！まだ帰れない。")
 		}
 	case StairsUp: // フロア1・2：1つ上のフロアへ（下り階段位置にスポーン）
 		playSFX(sfxStairUpPCM)
-		return newGameSceneWithState(g.playerHP, g.turnCount, g.floor-1, g.hasTreasure, true, g.inventory), nil
+		return newGameSceneWithState(g.playerHP, g.turnCount, g.floor-1, g.hasTreasure, true, g.inventory, g.messageLog, g.Level, g.XP, g.XPToNext, g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), nil
 	case StairsDown: // 下のフロアへ（上り階段位置にスポーン）
 		playSFX(sfxStairDownPCM)
-		return newGameSceneWithState(g.playerHP, g.turnCount, g.floor+1, g.hasTreasure, false, g.inventory), nil
+		return newGameSceneWithState(g.playerHP, g.turnCount, g.floor+1, g.hasTreasure, false, g.inventory, g.messageLog, g.Level, g.XP, g.XPToNext, g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), nil
 	}
 	return nil, nil
 }
 
-// スコア算出: (残りHP * 100 - ターン数) * maxFloor（最低0）
+// スコア算出: (残りHP * 100 - ターン数) * 階層数（最低0）
 func (g *GameScene) calcScore() int {
 	base := g.playerHP*100 - g.turnCount
 	if base < 0 {
 		base = 0
 	}
-	return base * maxFloor
+	return base * len(floorDefs)
 }

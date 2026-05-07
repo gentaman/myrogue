@@ -1,28 +1,35 @@
 package game
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"image/color"
-)
-
-const (
-	playerMaxHP    = 20
-	maxCarryWeight = 10
+	"strconv"
+	"strings"
 )
 
 // ItemKind はアイテムの種別を表す
 type ItemKind int
 
+// アイテムの定数定義（互換性のために残すが、基本的には JSON の順序に依存）
 const (
 	ItemHealSmall ItemKind = iota
 	ItemHealLarge
-	ItemRevealMap   // 取得したフロアでのみ使用可
-	ItemClairvoyant // どのフロアでも使用可、使用フロアのみ全探索
-	itemKindCount
+	ItemRevealMap
+	ItemClairvoyant
 )
-
 // ItemEffect はアイテム使用時の効果コマンド
-type ItemEffect func(g *GameScene, entry InventoryEntry)
+type ItemEffect func(g *GameScene, entryIdx int)
+
+type EquipType int
+
+const (
+	EquipNone EquipType = iota
+	EquipWeapon
+	EquipShield
+	EquipArmor
+)
 
 type itemDef struct {
 	name       string
@@ -36,90 +43,233 @@ type itemDef struct {
 	// canUse が nil でなければ使用前に呼び出し、false のとき使用不可メッセージを設定する
 	canUse func(g *GameScene, entry InventoryEntry) (bool, string)
 	effect ItemEffect
+
+	equipType EquipType
+	atk       int
+	def       int
 }
 
-// entryName はインベントリ行に表示する名前を返す（floorBound アイテムはフロア番号を付加）
+// entryName はインベントリ行に表示する名前を返す（floorBound アイテムはフロア番号を付加、装備中は [E] を付加）
 func (d *itemDef) entryName(entry InventoryEntry) string {
+	name := d.name
 	if d.floorBound {
-		return fmt.Sprintf("%s[F%d]", d.name, entry.obtainedFloor+1)
+		name = fmt.Sprintf("%s[F%d]", d.name, entry.obtainedFloor+1)
 	}
-	return d.name
+	if entry.Equipped {
+		name = "[E]" + name
+	}
+	return name
 }
 
-var itemDefs = []itemDef{
-	ItemHealSmall: {
-		name:       "回復薬（小）",
-		desc:       "草を煎じた素朴な薬。飲むとHPが5回復する。軽くて持ち運びやすい。",
-		effectDesc: "HP +5",
-		weight:     2,
-		rarity:     1,
-		clr:        color.RGBA{100, 255, 150, 255},
-		effect: func(g *GameScene, _ InventoryEntry) {
-			g.playerHP += 5
+var (
+	//go:embed assets/items.json
+	itemsJSON []byte
+	//go:embed assets/player.json
+	playerJSON []byte
+
+	itemDefs []itemDef
+
+	itemIDMap = map[string]ItemKind{}
+
+	playerMaxHP    int
+	maxCarryWeight int
+)
+
+// parameterizedEffectSpec は JSON 内の効果定義
+type parameterizedEffectSpec struct {
+	Type      string `json:"type"`
+	Amount    int    `json:"amount"`
+	Message   string `json:"message"`
+	EquipType string `json:"equip_type"`
+	Atk       int    `json:"atk"`
+	Def       int    `json:"def"`
+	Cost      int    `json:"cost"`
+	Damage    int    `json:"damage"`
+}
+
+// parameterizedConditionSpec は JSON 内の条件定義
+type parameterizedConditionSpec struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+type rawItem struct {
+	ID         string                     `json:"id"`
+	Name       string                     `json:"name"`
+	Desc       string                     `json:"desc"`
+	EffectDesc string                     `json:"effect_desc"`
+	Weight     int                        `json:"weight"`
+	Rarity     int                        `json:"rarity"`
+	Color      string                     `json:"color"`
+	FloorBound bool                       `json:"floor_bound"`
+	CanUse     *parameterizedConditionSpec `json:"can_use"`
+	Effect     *parameterizedEffectSpec    `json:"effect"`
+}
+
+func init() {
+	// プレイヤー設定ロード
+	var playerCfg struct {
+		MaxHP          int `json:"max_hp"`
+		MaxCarryWeight int `json:"max_carry_weight"`
+	}
+	if err := json.Unmarshal(playerJSON, &playerCfg); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal player.json: %v", err))
+	}
+	playerMaxHP = playerCfg.MaxHP
+	maxCarryWeight = playerCfg.MaxCarryWeight
+
+	// アイテム設定ロード
+	var rawItems []rawItem
+	if err := json.Unmarshal(itemsJSON, &rawItems); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal items.json: %v", err))
+	}
+
+	itemDefs = make([]itemDef, len(rawItems))
+	for i, raw := range rawItems {
+		itemIDMap[raw.ID] = ItemKind(i)
+		clr := hexToRGBA(raw.Color)
+		var et EquipType
+		var atk, def int
+		if raw.Effect != nil && raw.Effect.Type == "equip" {
+			switch raw.Effect.EquipType {
+			case "weapon":
+				et = EquipWeapon
+			case "shield":
+				et = EquipShield
+			case "armor":
+				et = EquipArmor
+			}
+			atk = raw.Effect.Atk
+			def = raw.Effect.Def
+		}
+		itemDefs[i] = itemDef{
+			name:       raw.Name,
+			desc:       raw.Desc,
+			effectDesc: raw.EffectDesc,
+			weight:     raw.Weight,
+			rarity:     raw.Rarity,
+			clr:        clr,
+			floorBound: raw.FloorBound,
+			canUse:     buildCondition(raw.CanUse),
+			effect:     buildEffect(raw.Effect),
+			equipType:  et,
+			atk:        atk,
+			def:        def,
+		}
+	}
+}
+
+func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
+	if spec == nil {
+		return nil
+	}
+	switch spec.Type {
+	case "heal":
+		return func(g *GameScene, _ int) {
+			g.playerHP += spec.Amount
 			if g.playerHP > playerMaxHP {
 				g.playerHP = playerMaxHP
 			}
-			g.message = "回復薬（小）を使った！ HP +5"
-		},
-	},
-	ItemHealLarge: {
-		name:       "回復薬（大）",
-		desc:       "希少な霊草から作られた上質な薬。飲むとHPが10回復する。効果は高いが重い。",
-		effectDesc: "HP +10",
-		weight:     4,
-		rarity:     2,
-		clr:        color.RGBA{50, 220, 80, 255},
-		effect: func(g *GameScene, _ InventoryEntry) {
-			g.playerHP += 10
-			if g.playerHP > playerMaxHP {
-				g.playerHP = playerMaxHP
+			g.pushMessage(spec.Message)
+		}
+	case "reveal_map":
+		return func(g *GameScene, _ int) {
+			for x := 0; x < mapWidth; x++ {
+				for y := 0; y < mapHeight; y++ {
+					if g.worldMap[x][y] != Wall {
+						g.explored[x][y] = true
+					}
+				}
 			}
-			g.message = "回復薬（大）を使った！ HP +10"
-		},
-	},
-	ItemRevealMap: {
-		name:       "フロアの地図",
-		desc:       "特定のフロアの全体像が描かれた古い地図。取得したフロアでのみ使用できる。他のフロアに持ち込んでも使えない。",
-		effectDesc: "取得フロアのみ全探索",
-		weight:     1,
-		rarity:     1,
-		floorBound: true,
-		clr:        color.RGBA{255, 220, 80, 255},
-		canUse: func(g *GameScene, entry InventoryEntry) (bool, string) {
+			if strings.Contains(spec.Message, "%d") {
+				g.pushMessage(fmt.Sprintf(spec.Message, g.floor+1))
+			} else {
+				g.pushMessage(spec.Message)
+			}
+		}
+	case "fireball":
+		return func(g *GameScene, idx int) {
+			if g.MP < spec.Cost {
+				g.pushMessage("MPが足りない！")
+				return
+			}
+			dx, dy := g.playerDir.delta()
+			nx, ny := g.playerX+dx, g.playerY+dy
+			
+			hit := false
+			for i := range g.enemies {
+				e := &g.enemies[i]
+				if e.x == nx && e.y == ny {
+					g.MP -= spec.Cost
+					g.pushMessage(spec.Message)
+					e.hp -= spec.Damage
+					if e.hp <= 0 {
+						g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
+						g.pushMessage(fmt.Sprintf("%sを倒した！", enemyDefs[e.kind].name))
+					} else {
+						g.pushMessage(fmt.Sprintf("%sに%dのダメージ！", enemyDefs[e.kind].name, spec.Damage))
+					}
+					hit = true
+					break
+				}
+			}
+			if !hit {
+				g.pushMessage("何もない方向に炎を放った。")
+			}
+		}
+	case "equip":
+		return func(g *GameScene, idx int) {
+			entry := &g.inventory[idx]
+			def := &itemDefs[entry.kind]
+
+			if entry.Equipped {
+				entry.Equipped = false
+				g.pushMessage(def.name + "を外した。")
+				return
+			}
+
+			// 同じ箇所の他の装備を外す
+			for i := range g.inventory {
+				if g.inventory[i].Equipped && itemDefs[g.inventory[i].kind].equipType == def.equipType {
+					g.inventory[i].Equipped = false
+				}
+			}
+			entry.Equipped = true
+			g.pushMessage(def.name + "を装備した。")
+		}
+	default:
+		return nil
+	}
+}
+
+func buildCondition(spec *parameterizedConditionSpec) func(*GameScene, InventoryEntry) (bool, string) {
+	if spec == nil {
+		return nil
+	}
+	switch spec.Type {
+	case "check_same_floor":
+		return func(g *GameScene, entry InventoryEntry) (bool, string) {
 			if entry.obtainedSeed != g.mapSeed {
-				return false, fmt.Sprintf("この地図はフロア%dでしか使えない。", entry.obtainedFloor+1)
+				return false, fmt.Sprintf(spec.Message, entry.obtainedFloor+1)
 			}
 			return true, ""
-		},
-		effect: func(g *GameScene, _ InventoryEntry) {
-			for x := 0; x < mapWidth; x++ {
-				for y := 0; y < mapHeight; y++ {
-					if g.worldMap[x][y] != Wall {
-						g.explored[x][y] = true
-					}
-				}
-			}
-			g.message = "フロアの地図を使った！このフロアの全体が明らかになった。"
-		},
-	},
-	ItemClairvoyant: {
-		name:       "千里眼の薬",
-		desc:       "遠く離れた場所を見通す不思議な薬。使ったフロアの全体が明らかになる。どのフロアでも使えるので、深い階層まで温存するのも手だ。",
-		effectDesc: "使用フロアのみ全探索",
-		weight:     2,
-		rarity:     3,
-		clr:        color.RGBA{100, 180, 255, 255},
-		effect: func(g *GameScene, _ InventoryEntry) {
-			for x := 0; x < mapWidth; x++ {
-				for y := 0; y < mapHeight; y++ {
-					if g.worldMap[x][y] != Wall {
-						g.explored[x][y] = true
-					}
-				}
-			}
-			g.message = fmt.Sprintf("千里眼の薬を飲んだ！フロア%dの全体が明らかになった。", g.floor+1)
-		},
-	},
+		}
+	default:
+		return nil
+	}
+}
+
+func hexToRGBA(hex string) color.RGBA {
+	if len(hex) > 0 && hex[0] == '#' {
+		hex = hex[1:]
+	}
+	if len(hex) != 6 {
+		return color.RGBA{255, 255, 255, 255}
+	}
+	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
+	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
+	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
+	return color.RGBA{uint8(r), uint8(g), uint8(b), 255}
 }
 
 // MapItem はマップ上に落ちているアイテム
@@ -136,6 +286,7 @@ type InventoryEntry struct {
 	count         int
 	obtainedSeed  int64 // floorBound アイテム用のマップ生成シード（それ以外は 0）
 	obtainedFloor int   // ラベル表示用フロア番号（floorBound アイテムのみ有効）
+	Equipped      bool
 }
 
 // currentWeight は現在の所持重量を返す
@@ -145,6 +296,26 @@ func (g *GameScene) currentWeight() int {
 		total += itemDefs[e.kind].weight * e.count
 	}
 	return total
+}
+
+func (g *GameScene) equippedAtk() int {
+	atk := 0
+	for _, e := range g.inventory {
+		if e.Equipped {
+			atk += itemDefs[e.kind].atk
+		}
+	}
+	return atk
+}
+
+func (g *GameScene) equippedDef() int {
+	def := 0
+	for _, e := range g.inventory {
+		if e.Equipped {
+			def += itemDefs[e.kind].def
+		}
+	}
+	return def
 }
 
 // addInventory は重量上限を確認してからインベントリにアイテムを追加する。
@@ -160,10 +331,13 @@ func (g *GameScene) addInventory(k ItemKind, obtainedSeed int64, obtainedFloor i
 	if g.currentWeight()+def.weight > maxCarryWeight {
 		return false
 	}
-	for i := range g.inventory {
-		if g.inventory[i].kind == k && g.inventory[i].obtainedSeed == seed {
-			g.inventory[i].count++
-			return true
+	// 装備品はスタックしない（Equipped 状態の管理のため）
+	if def.equipType == EquipNone {
+		for i := range g.inventory {
+			if g.inventory[i].kind == k && g.inventory[i].obtainedSeed == seed {
+				g.inventory[i].count++
+				return true
+			}
 		}
 	}
 	g.inventory = append(g.inventory, InventoryEntry{kind: k, count: 1, obtainedSeed: seed, obtainedFloor: floor})
@@ -181,12 +355,19 @@ func (g *GameScene) useInventoryItem(idx int) bool {
 
 	if def.canUse != nil {
 		if ok, msg := def.canUse(g, entry); !ok {
-			g.message = msg
+			g.pushMessage(msg)
 			return false
 		}
 	}
 
-	def.effect(g, entry)
+	if def.effect != nil {
+		def.effect(g, idx)
+	}
+
+	// 装備品は使用しても消費されない
+	if def.equipType != EquipNone {
+		return true
+	}
 
 	g.inventory[idx].count--
 	if g.inventory[idx].count <= 0 {
@@ -200,27 +381,26 @@ func (g *GameScene) dropInventoryItem(idx int) {
 	if idx < 0 || idx >= len(g.inventory) {
 		return
 	}
+
+	// 足元に既にアイテムがないか確認
+	_, alreadyOnFloor := g.itemAtFeet()
+	if alreadyOnFloor {
+		g.pushMessage("足元にアイテムが落ちているため、捨てられない。")
+		return
+	}
+
 	entry := g.inventory[idx]
 	def := &itemDefs[entry.kind]
 
-	alreadyOnFloor := false
-	for _, it := range g.mapItems {
-		if it.x == g.playerX && it.y == g.playerY {
-			alreadyOnFloor = true
-			break
-		}
-	}
-	if !alreadyOnFloor {
-		g.mapItems = append(g.mapItems, MapItem{
-			x:             g.playerX,
-			y:             g.playerY,
-			kind:          entry.kind,
-			obtainedSeed:  entry.obtainedSeed,
-			obtainedFloor: entry.obtainedFloor,
-		})
-	}
+	g.mapItems = append(g.mapItems, MapItem{
+		x:             g.playerX,
+		y:             g.playerY,
+		kind:          entry.kind,
+		obtainedSeed:  entry.obtainedSeed,
+		obtainedFloor: entry.obtainedFloor,
+	})
 
-	g.message = def.name + "を捨てた。"
+	g.pushMessage(def.name + "を捨てた。")
 	g.inventory[idx].count--
 	if g.inventory[idx].count <= 0 {
 		g.inventory = append(g.inventory[:idx], g.inventory[idx+1:]...)
@@ -228,18 +408,14 @@ func (g *GameScene) dropInventoryItem(idx int) {
 }
 
 // pickupItem はプレイヤー位置のアイテムを取得する（重量上限チェックあり）
-func (g *GameScene) pickupItem() {
-	for i, it := range g.mapItems {
-		if it.x == g.playerX && it.y == g.playerY {
-			if !g.addInventory(it.kind, it.obtainedSeed, it.obtainedFloor) {
-				g.message = "重すぎて持てない！（重量: " + itoa(g.currentWeight()) + "/" + itoa(maxCarryWeight) + "）"
-				return
-			}
-			g.mapItems = append(g.mapItems[:i], g.mapItems[i+1:]...)
-			g.message = itemDefs[it.kind].name + "を手に入れた！"
-			return
-		}
+func (g *GameScene) pickupItem(idx int) {
+	it := g.mapItems[idx]
+	if !g.addInventory(it.kind, it.obtainedSeed, it.obtainedFloor) {
+		g.pushMessage("重すぎて持てない！（重量: " + itoa(g.currentWeight()) + "/" + itoa(maxCarryWeight) + "）")
+		return
 	}
+	g.mapItems = append(g.mapItems[:idx], g.mapItems[idx+1:]...)
+	g.pushMessage(itemDefs[it.kind].name + "を手に入れた！")
 }
 
 // itoa は非負整数を文字列に変換する

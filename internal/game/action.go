@@ -4,6 +4,7 @@ import "fmt"
 
 const (
 	menuKindAttack = iota
+	menuKindExamine
 	menuKindStairs
 	menuKindWait
 	menuKindItem
@@ -14,6 +15,16 @@ type actionItem struct {
 	label   string
 	enabled bool
 	kind    int
+}
+
+// 足元にアイテムがあるかチェック
+func (g *GameScene) itemAtFeet() (int, bool) {
+	for i, it := range g.mapItems {
+		if it.x == g.playerX && it.y == g.playerY {
+			return i, true
+		}
+	}
+	return -1, false
 }
 
 // プレイヤーの正面にいる敵を返す
@@ -40,6 +51,7 @@ func (g *GameScene) currentStairType() TileType {
 func (g *GameScene) buildMenu() {
 	_, _, hasAdj := g.adjacentEnemy()
 	stair := g.currentStairType()
+	_, hasItem := g.itemAtFeet()
 
 	var attackLabel string
 	if hasAdj {
@@ -48,30 +60,23 @@ func (g *GameScene) buildMenu() {
 		attackLabel = "攻撃する（正面に敵なし）"
 	}
 
+	var examineLabel string
+	if hasItem {
+		examineLabel = "足元のアイテムを拾う"
+	} else if stair != Wall {
+		examineLabel = "階段を調べる"
+	} else {
+		examineLabel = "調べる（何もなし）"
+	}
+
 	itemLabel := fmt.Sprintf("アイテムを使う（重量: %d/%d）", g.currentWeight(), maxCarryWeight)
 	if len(g.inventory) == 0 {
 		itemLabel = "アイテムを使う（所持なし）"
 	}
 
-	var stairLabel string
-	switch stair {
-	case Stairs:
-		if g.hasTreasure {
-			stairLabel = "上り階段を使う（脱出）"
-		} else {
-			stairLabel = "上り階段を使う（宝がない）"
-		}
-	case StairsUp:
-		stairLabel = "上り階段を使う"
-	case StairsDown:
-		stairLabel = "下り階段を使う"
-	default:
-		stairLabel = "階段を使う（階段の上にいない）"
-	}
-
 	g.menuItems = []actionItem{
 		{label: attackLabel, enabled: hasAdj, kind: menuKindAttack},
-		{label: stairLabel, enabled: stair != Wall && (stair != Stairs || g.hasTreasure), kind: menuKindStairs},
+		{label: examineLabel, enabled: hasItem || stair != Wall, kind: menuKindExamine},
 		{label: itemLabel, enabled: len(g.inventory) > 0, kind: menuKindItem},
 		{label: "待機する（1ターン消費）", enabled: true, kind: menuKindWait},
 		{label: "閉じる", enabled: true, kind: menuKindClose},
@@ -99,10 +104,15 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 			return nil, nil
 		}
 		g.trySpawnEnemyPerTurn()
-	case menuKindStairs:
+	case menuKindExamine:
 		g.turnCount++
-		if next, err := g.checkTile(); next != nil || err != nil {
+		// アイテムがあれば拾う、なければ階段判定
+		if idx, found := g.itemAtFeet(); found {
+			g.pickupItem(idx)
+		} else if next, err := g.checkTile(); next != nil || err != nil {
 			return next, err
+		} else {
+			g.pushMessage("特に何もない。")
 		}
 		g.moveEnemies()
 		if g.playState == StateDead {
@@ -113,7 +123,11 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 		return &InventoryScene{game: g}, nil
 	case menuKindWait:
 		g.turnCount++
-		g.message = "待機した。"
+		g.pushMessage("待機した。")
+		// MP回復
+		if g.MP < g.MaxMP {
+			g.MP++
+		}
 		g.moveEnemies()
 		if g.playState == StateDead {
 			return nil, nil

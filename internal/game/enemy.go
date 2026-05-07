@@ -1,7 +1,10 @@
 package game
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
+	"image/color"
 	"math/rand"
 )
 
@@ -36,12 +39,68 @@ const (
 	EnemyAlerted                   // プレイヤーを発見・追跡中
 )
 
+// EnemyKind は敵の種別を表す
+type EnemyKind int
+
+type enemyDef struct {
+	name     string
+	hp       int
+	atk      int
+	xp       int
+	rarity   int
+	clr      color.RGBA
+	floorMin int
+}
+
+var (
+	//go:embed assets/enemies.json
+	enemiesJSON []byte
+
+	enemyDefs []enemyDef
+
+	enemyIDMap = map[string]EnemyKind{}
+)
+
+type rawEnemy struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	HP       int    `json:"hp"`
+	ATK      int    `json:"atk"`
+	XP       int    `json:"xp"`
+	Rarity   int    `json:"rarity"`
+	Color    string `json:"color"`
+	FloorMin int    `json:"floor_min"`
+}
+
+func init() {
+	var rawEnemies []rawEnemy
+	if err := json.Unmarshal(enemiesJSON, &rawEnemies); err != nil {
+		panic(fmt.Sprintf("failed to unmarshal enemies.json: %v", err))
+	}
+
+	enemyDefs = make([]enemyDef, len(rawEnemies))
+	for i, raw := range rawEnemies {
+		enemyIDMap[raw.ID] = EnemyKind(i)
+		enemyDefs[i] = enemyDef{
+			name:     raw.Name,
+			hp:       raw.HP,
+			atk:      raw.ATK,
+			xp:       raw.XP,
+			rarity:   raw.Rarity,
+			clr:      hexToRGBA(raw.Color),
+			floorMin: raw.FloorMin,
+		}
+	}
+}
+
 // Enemy は敵キャラクターを表す
 type Enemy struct {
 	x, y       int
 	dir        Dir
 	attackAnim int        // 攻撃アニメ残りフレーム数
 	state      EnemyState // 警戒状態
+	hp         int
+	kind       EnemyKind
 }
 
 func (g *GameScene) isEnemyAt(x, y int) bool {
@@ -55,10 +114,19 @@ func (g *GameScene) isEnemyAt(x, y int) bool {
 
 // プレイヤーが敵を攻撃（移動先の敵を倒す）
 func (g *GameScene) attackEnemy(x, y int) {
-	for i, e := range g.enemies {
+	damage := 1 + g.equippedAtk()
+	for i := range g.enemies {
+		e := &g.enemies[i]
 		if e.x == x && e.y == y {
-			g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
-			g.message = "敵を倒した！"
+			def := &enemyDefs[e.kind]
+			e.hp -= damage
+			if e.hp <= 0 {
+				g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
+				g.pushMessage(fmt.Sprintf("%sを倒した！", def.name))
+				g.gainXP(def.xp)
+			} else {
+				g.pushMessage(fmt.Sprintf("%sに%dのダメージを与えた！", def.name, damage))
+			}
 			playSFXHit()
 			return
 		}
@@ -171,19 +239,29 @@ func (g *GameScene) moveEnemies() {
 
 	for i := range g.enemies {
 		e := &g.enemies[i]
+		def := &enemyDefs[e.kind]
 
 		// 正面にプレイヤーがいるなら攻撃（移動より先に判定）
 		fdx, fdy := e.dir.delta()
 		if e.x+fdx == g.playerX && e.y+fdy == g.playerY {
 			e.attackAnim = attackAnimFrames
-			g.playerHP--
+			damage := def.atk - g.equippedDef()
+			if damage < 0 {
+				damage = 0
+			}
+			g.playerHP -= damage
 			playSFXHit()
 			if g.playerHP <= 0 {
+				g.playerHP = 0
 				g.playState = StateDead
-				g.message = "力尽きた..."
+				g.pushMessage("力尽きた...")
 				return
 			}
-			g.message = fmt.Sprintf("敵に攻撃された！ HP: %d", g.playerHP)
+			if damage > 0 {
+				g.pushMessage(fmt.Sprintf("%sに攻撃された！ %dのダメージ！ HP: %d", def.name, damage, g.playerHP))
+			} else {
+				g.pushMessage(fmt.Sprintf("%sの攻撃を弾き返した！", def.name))
+			}
 			continue
 		}
 
