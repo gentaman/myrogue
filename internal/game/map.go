@@ -25,6 +25,108 @@ type Room struct {
 func (r Room) centerX() int { return r.x + r.w/2 }
 func (r Room) centerY() int { return r.y + r.h/2 }
 
+type bspLeaf struct {
+	x, y, w, h int
+	left, right *bspLeaf
+	room       *Room
+}
+
+const minLeafSize = 8
+
+func (l *bspLeaf) split(rng *rand.Rand) bool {
+	if l.left != nil || l.right != nil {
+		return false
+	}
+
+	// 分割方向の決定
+	splitH := rng.Intn(2) == 0
+	if l.w > l.h && float64(l.w)/float64(l.h) >= 1.25 {
+		splitH = false
+	} else if l.h > l.w && float64(l.h)/float64(l.w) >= 1.25 {
+		splitH = true
+	}
+
+	max := l.w
+	if splitH {
+		max = l.h
+	}
+	if max <= minLeafSize*2 {
+		return false
+	}
+
+	splitRange := max - minLeafSize*2
+	var split int
+	if splitRange > 0 {
+		split = rng.Intn(splitRange) + minLeafSize
+	} else {
+		split = minLeafSize
+	}
+
+	if splitH {
+		l.left = &bspLeaf{l.x, l.y, l.w, split, nil, nil, nil}
+		l.right = &bspLeaf{l.x, l.y + split, l.w, l.h - split, nil, nil, nil}
+	} else {
+		l.left = &bspLeaf{l.x, l.y, split, l.h, nil, nil, nil}
+		l.right = &bspLeaf{l.x + split, l.y, l.w - split, l.h, nil, nil, nil}
+	}
+	return true
+}
+
+func (l *bspLeaf) createRooms(g *GameScene, rng *rand.Rand) {
+	if l.left != nil || l.right != nil {
+		if l.left != nil {
+			l.left.createRooms(g, rng)
+		}
+		if l.right != nil {
+			l.right.createRooms(g, rng)
+		}
+	} else {
+		// 部屋のサイズ: 最小3x3, リーフサイズ-パディングまで
+		w := rng.Intn(l.w-5) + 4
+		h := rng.Intn(l.h-5) + 4
+		x := l.x + rng.Intn(l.w-w-1) + 1
+		y := l.y + rng.Intn(l.h-h-1) + 1
+		l.room = &Room{x, y, w, h}
+
+		for rx := x; rx < x+w; rx++ {
+			for ry := y; ry < y+h; ry++ {
+				g.worldMap[rx][ry] = Floor
+			}
+		}
+		g.rooms = append(g.rooms, *l.room)
+	}
+}
+
+func (l *bspLeaf) createCorridors(g *GameScene, rng *rand.Rand) {
+	if l.left != nil && l.right != nil {
+		l.left.createCorridors(g, rng)
+		l.right.createCorridors(g, rng)
+
+		r1 := l.left.getRoom()
+		r2 := l.right.getRoom()
+		if r1 != nil && r2 != nil {
+			g.digCorridor(rng, r1.centerX(), r1.centerY(), r2.centerX(), r2.centerY())
+		}
+	}
+}
+
+func (l *bspLeaf) getRoom() *Room {
+	if l.room != nil {
+		return l.room
+	}
+	if l.left != nil {
+		if r := l.left.getRoom(); r != nil {
+			return r
+		}
+	}
+	if l.right != nil {
+		if r := l.right.getRoom(); r != nil {
+			return r
+		}
+	}
+	return nil
+}
+
 func (g *GameScene) generateMap() {
 	seed := time.Now().UnixNano()
 	g.mapSeed = seed
@@ -36,35 +138,31 @@ func (g *GameScene) generateMap() {
 		}
 	}
 
-	for attempt := 0; len(g.rooms) < 5 && attempt < 200; attempt++ {
-		w := rng.Intn(6) + 4
-		h := rng.Intn(6) + 4
-		x := rng.Intn(mapWidth-w-2) + 1
-		y := rng.Intn(mapHeight-h-2) + 1
+	g.rooms = nil
+	g.mapItems = nil
 
-		// 既存の部屋と1マスのマージンを含めて重複しないか確認
-		overlaps := false
-		for _, r := range g.rooms {
-			if x-1 < r.x+r.w && x+w+1 > r.x && y-1 < r.y+r.h && y+h+1 > r.y {
-				overlaps = true
-				break
+	root := &bspLeaf{0, 0, mapWidth, mapHeight, nil, nil, nil}
+	leaves := []*bspLeaf{root}
+
+	didSplit := true
+	for didSplit {
+		didSplit = false
+		newLeaves := []*bspLeaf{}
+		for _, l := range leaves {
+			if l.left == nil && l.right == nil {
+				if l.w > minLeafSize*2 || l.h > minLeafSize*2 || rng.Float64() > 0.25 {
+					if l.split(rng) {
+						newLeaves = append(newLeaves, l.left, l.right)
+						didSplit = true
+					}
+				}
 			}
 		}
-		if overlaps {
-			continue
-		}
-
-		for rx := x; rx < x+w; rx++ {
-			for ry := y; ry < y+h; ry++ {
-				g.worldMap[rx][ry] = Floor
-			}
-		}
-		g.rooms = append(g.rooms, Room{x, y, w, h})
+		leaves = append(leaves, newLeaves...)
 	}
 
-	for i := 1; i < len(g.rooms); i++ {
-		g.digCorridor(rng, g.rooms[i-1].centerX(), g.rooms[i-1].centerY(), g.rooms[i].centerX(), g.rooms[i].centerY())
-	}
+	root.createRooms(g, rng)
+	root.createCorridors(g, rng)
 
 	if len(g.rooms) > 0 {
 		g.playerX = g.rooms[0].centerX()
@@ -149,7 +247,7 @@ func (g *GameScene) digHorizontal(x1, x2, y int) {
 			if y > 0 {
 				g.worldMap[x][y-1] = Wall
 			}
-			if y < mapHeight {
+			if y < mapHeight-1 {
 				g.worldMap[x][y+1] = Wall
 			}
 			g.worldMap[x][y] = Floor
@@ -166,7 +264,7 @@ func (g *GameScene) digVertical(y1, y2, x int) {
 			if x > 0 {
 				g.worldMap[x-1][y] = Wall
 			}
-			if x < mapWidth {
+			if x < mapWidth-1 {
 				g.worldMap[x+1][y] = Wall
 			}
 			g.worldMap[x][y] = Floor
