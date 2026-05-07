@@ -150,6 +150,16 @@ func (g *GameScene) rollStatsUp(rng *rand.Rand) {
 	}
 }
 
+func (g *GameScene) tryDodge(acc int) bool {
+	// evasionChance = Agi * 2 + Luk / 2 (max 80%)
+	// 命中率(acc)で補正する (例: 命中が低いほど回避しやすい)
+	dodgeChance := (g.Agi*2 + g.Luk/2) + (100 - acc)
+	if dodgeChance > 80 {
+		dodgeChance = 80
+	}
+	return rand.Intn(100) < dodgeChance
+}
+
 func (g *GameScene) pushMessage(msg string) {
 	g.message = msg
 	g.messageLog = append(g.messageLog, msg)
@@ -324,11 +334,6 @@ func (g *GameScene) updateVisibility() {
 func (g *GameScene) checkTile() (Scene, error) {
 	tile := g.worldMap[g.playerX][g.playerY]
 	switch tile {
-	case Treasure:
-		g.hasTreasure = true
-		g.worldMap[g.playerX][g.playerY] = Floor
-		g.pushMessage("宝を手に入れた！上の階段まで戻れ！")
-		playSFX(sfxCoinPCM)
 	case Stairs: // フロア0の出口：宝持参でクリア
 		if g.hasTreasure {
 			g.playState = StateWin

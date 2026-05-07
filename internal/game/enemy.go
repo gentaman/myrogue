@@ -46,6 +46,7 @@ type enemyDef struct {
 	name     string
 	hp       int
 	atk      int
+	acc      int
 	xp       int
 	rarity   int
 	clr      color.RGBA
@@ -66,6 +67,7 @@ type rawEnemy struct {
 	Name     string `json:"name"`
 	HP       int    `json:"hp"`
 	ATK      int    `json:"atk"`
+	ACC      int    `json:"acc"`
 	XP       int    `json:"xp"`
 	Rarity   int    `json:"rarity"`
 	Color    string `json:"color"`
@@ -85,6 +87,7 @@ func init() {
 			name:     raw.Name,
 			hp:       raw.HP,
 			atk:      raw.ATK,
+			acc:      raw.ACC,
 			xp:       raw.XP,
 			rarity:   raw.Rarity,
 			clr:      hexToRGBA(raw.Color),
@@ -245,22 +248,27 @@ func (g *GameScene) moveEnemies() {
 		fdx, fdy := e.dir.delta()
 		if e.x+fdx == g.playerX && e.y+fdy == g.playerY {
 			e.attackAnim = attackAnimFrames
-			damage := def.atk - g.equippedDef()
-			if damage < 0 {
-				damage = 0
-			}
-			g.playerHP -= damage
-			playSFXHit()
-			if g.playerHP <= 0 {
-				g.playerHP = 0
-				g.playState = StateDead
-				g.pushMessage("力尽きた...")
-				return
-			}
-			if damage > 0 {
-				g.pushMessage(fmt.Sprintf("%sに攻撃された！ %dのダメージ！ HP: %d", def.name, damage, g.playerHP))
+			
+			if g.tryDodge(def.acc) {
+				g.pushMessage(fmt.Sprintf("%sの攻撃をかわした！", def.name))
 			} else {
-				g.pushMessage(fmt.Sprintf("%sの攻撃を弾き返した！", def.name))
+				damage := def.atk - g.equippedDef()
+				if damage < 0 {
+					damage = 0
+				}
+				g.playerHP -= damage
+				playSFXHit()
+				if g.playerHP <= 0 {
+					g.playerHP = 0
+					g.playState = StateDead
+					g.pushMessage("力尽きた...")
+					return
+				}
+				if damage > 0 {
+					g.pushMessage(fmt.Sprintf("%sに攻撃された！ %dのダメージ！ HP: %d", def.name, damage, g.playerHP))
+				} else {
+					g.pushMessage(fmt.Sprintf("%sの攻撃を弾き返した！", def.name))
+				}
 			}
 			continue
 		}
@@ -311,3 +319,4 @@ func abs(x int) int {
 	}
 	return x
 }
+

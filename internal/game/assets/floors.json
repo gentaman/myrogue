@@ -6,7 +6,8 @@
     "enemy_count": 4,
     "item_count": 3,
     "enemy_pool": [
-      { "id": "slime", "weight": 70 }
+      { "id": "slime", "weight": 90 },
+      { "id": "golden_slime", "weight": 10 }
     ],
     "item_pool": [
       { "id": "heal_small", "weight": 60 },
@@ -45,6 +46,7 @@
     "enemy_count": 6,
     "item_count": 4,
     "enemy_pool": [
+      { "id": "golden_slimegoblin", "weight": 10 },
       { "id": "goblin", "weight": 40 },
       { "id": "orc", "weight": 30 }
     ],
@@ -61,23 +63,20 @@
   },
   {
     "floor": 4,
-    "min_rooms": 6,
+    "min_rooms": 8,
     "max_rooms": 10,
     "enemy_count": 8,
     "item_count": 5,
     "enemy_pool": [
       { "id": "goblin", "weight": 20 },
-      { "id": "orc", "weight": 50 },
-      { "id": "dragon", "weight": 30 }
+      { "id": "orc", "weight": 70 },
+      { "id": "dragon", "weight": 10 }
     ],
     "item_pool": [
-      { "id": "heal_large", "weight": 40 },
-      { "id": "weapon_iron", "weight": 20 },
-      { "id": "shield_iron", "weight": 20 },
+      { "id": "heal_large", "weight": 30 },
       { "id": "clairvoyant", "weight": 10 },
       { "id": "fireball", "weight": 15 },
-      { "id": "goddess_statue", "weight": 15 },
-      { "id": "armor_iron", "weight": 20 }
+      { "id": "goddess_statue", "weight": 15 }
     ]
   }
 ]

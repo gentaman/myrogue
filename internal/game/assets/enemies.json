@@ -4,9 +4,21 @@
     "name": "スライム",
     "hp": 2,
     "atk": 1,
+    "acc": 80,
     "rarity": 1,
     "xp": 5,
     "color": "#78FF78",
+    "floor_min": 0
+  },
+  {
+    "id": "golden_slime",
+    "name": "黄金のスライム",
+    "hp": 5,
+    "atk": 1,
+    "acc": 80,
+    "rarity": 10,
+    "xp": 100,
+    "color": "#C8FF00",
     "floor_min": 0
   },
   {
@@ -14,9 +26,10 @@
     "name": "ゴブリン",
     "hp": 3,
     "atk": 2,
+    "acc": 70,
     "rarity": 2,
     "xp": 10,
-    "color": "#C8FF00",
+    "color": "#C8B0FF",
     "floor_min": 0
   },
   {
@@ -24,6 +37,7 @@
     "name": "オーク",
     "hp": 6,
     "atk": 3,
+    "acc": 80,
     "rarity": 3,
     "xp": 25,
     "color": "#009600",
@@ -34,6 +48,7 @@
     "name": "ドラゴン",
     "hp": 15,
     "atk": 5,
+    "acc": 90,
     "rarity": 5,
     "xp": 100,
     "color": "#FF0000",

@@ -158,16 +158,12 @@
     }
   },
   {
-    "id": "goddess_statue",
-    "name": "木彫りの女神",
-    "desc": "小さな女神の像。祈りを捧げると癒やしの光が溢れる。",
-    "effect_desc": "信仰心でHP回復",
-    "weight": 2,
-    "rarity": 2,
-    "color": "#FFD700",
-    "effect": {
-      "type": "heal_faith",
-      "message": "女神の光が体を包み、HPが%d回復した！"
-    }
+    "id": "treasure",
+    "name": "伝説の宝",
+    "desc": "持ち帰るべき伝説の宝。大切に持ち帰ろう。",
+    "effect_desc": "宝",
+    "weight": 1,
+    "rarity": 100,
+    "color": "#FFD700"
   }
   ]

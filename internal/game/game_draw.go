@@ -28,8 +28,6 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 					clr = color.RGBA{60, 60, 65, 255}
 				case Stairs:
 					clr = color.RGBA{0, 255, 255, 255}
-				case Treasure:
-					clr = color.RGBA{255, 215, 0, 255}
 				case StairsDown:
 					clr = color.RGBA{255, 140, 0, 255}
 				case StairsUp:
@@ -44,8 +42,6 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 					clr = color.RGBA{28, 28, 30, 255}
 				case Stairs:
 					clr = color.RGBA{0, 120, 120, 255}
-				case Treasure:
-					clr = color.RGBA{140, 110, 0, 255}
 				case StairsDown:
 					clr = color.RGBA{140, 70, 0, 255}
 				case StairsUp:

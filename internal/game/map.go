@@ -15,7 +15,6 @@ const (
 	Wall TileType = iota
 	Floor
 	Stairs // 上り階段（フロア0の出口）
-	Treasure
 	StairsDown // 下り階段（次のフロアへ）
 	StairsUp   // 上り階段（前のフロアへ、フロア1・2に配置）
 )
@@ -209,13 +208,15 @@ func (g *GameScene) generateMap() {
 		}
 	}
 
-	// 最下層のみ宝を配置
-	if g.floor == len(floorDefs)-1 {
-		for {
-			tx := rng.Intn(mapWidth)
-			ty := rng.Intn(mapHeight)
-			if g.worldMap[tx][ty] == Floor {
-				g.worldMap[tx][ty] = Treasure
+	// 最下層のみ宝を配置（所持していなければ）
+	if g.floor == len(floorDefs)-1 && !g.hasTreasure {
+		for attempt := 0; attempt < 100; attempt++ {
+			roomIdx := rng.Intn(len(g.rooms))
+			r := g.rooms[roomIdx]
+			tx := r.x + rng.Intn(r.w)
+			ty := r.y + rng.Intn(r.h)
+			if g.worldMap[tx][ty] == Floor && !g.nearSpecialTile(tx, ty) {
+				g.mapItems = append(g.mapItems, MapItem{x: tx, y: ty, kind: itemIDMap["treasure"]})
 				break
 			}
 		}
@@ -318,7 +319,7 @@ func (g *GameScene) nearSpecialTile(x, y int) bool {
 			nx, ny := x+dx, y+dy
 			if nx >= 0 && nx < mapWidth && ny >= 0 && ny < mapHeight {
 				t := g.worldMap[nx][ny]
-				if t == Stairs || t == StairsUp || t == StairsDown || t == Treasure {
+				if t == Stairs || t == StairsUp || t == StairsDown {
 					return true
 				}
 			}
