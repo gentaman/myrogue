@@ -1,7 +1,12 @@
 package game
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
+	"image"
+	"image/color"
+	_ "image/png"
 	"math"
 	"math/rand"
 	"time"
@@ -9,6 +14,22 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
+
+var (
+	//go:embed assets/images/player.png
+	playerPNG []byte
+
+	playerImage *ebiten.Image
+)
+
+func init() {
+	// プレイヤー画像ロード
+	img, _, err := image.Decode(bytes.NewReader(playerPNG))
+	if err != nil {
+		panic(fmt.Sprintf("failed to decode player.png: %v", err))
+	}
+	playerImage = ebiten.NewImageFromImage(img)
+}
 
 // PlayState はゲームの状態を表す
 type PlayState int
@@ -19,31 +40,58 @@ const (
 	StateDead
 )
 
+// TurnState はターンの進行状態を表す
+type TurnState int
+
+const (
+	TurnPlayerInput TurnState = iota
+	TurnEnemyAct
+)
+
+// Actor はプレイヤーや敵の共通データ
+type Actor struct {
+	X, Y       int
+	Dir        Dir
+	HP         int
+	MaxHP      int
+	AttackAnim int // 攻撃アニメ残りフレーム数
+	DamageAnim int // 被ダメージアニメ残りフレーム数
+}
+
+// Projectile は遠隔攻撃のアニメーション体
+type Projectile struct {
+	StartX, StartY float64
+	EndX, EndY     float64
+	Frame          int
+	TotalFrames    int
+	Color          color.RGBA
+}
+
 // GameScene はゲームプレイ画面を表す
 type GameScene struct {
-	worldMap    [mapWidth][mapHeight]TileType
-	explored    [mapWidth][mapHeight]bool // 一度でも視界に入ったタイル（静的要素を表示）
-	visible     [mapWidth][mapHeight]bool // 現在視界に入っているタイル（動的要素も表示）
-	mapSeed     int64                     // このフロアのマップ生成シード
-	playerX     int
-	playerY     int
-	playerHP    int
-	MP          int
-	MaxMP       int
-	Level       int
-	XP          int
-	XPToNext    int
+	worldMap                     [mapWidth][mapHeight]TileType
+	explored                     [mapWidth][mapHeight]bool // 一度でも視界に入ったタイル（静的要素を表示）
+	visible                      [mapWidth][mapHeight]bool // 現在視界に入っているタイル（動的要素も表示）
+	mapSeed                      int64                     // このフロアのマップ生成シード
+	Player                       Actor
+	MP                           int
+	MaxMP                        int
+	Level                        int
+	XP                           int
+	XPToNext                     int
 	Str, Wis, Fai, Vit, Agi, Luk int
-	hasTreasure bool
-	playState   PlayState
-	message     string
-	messageLog  []string
-	turnCount   int
-	enemies     []Enemy
-	rooms       []Room
-	maxEnemies  int
-	floor       int
-	playerDir   Dir
+	hasTreasure                  bool
+	playState                    PlayState
+	turnState                    TurnState
+	message                      string
+	messageLog                   []string
+	projectiles                  []Projectile
+	turnCount                    int
+	enemies                      []Enemy
+	activeEnemyIdx               int // 現在行動中の敵のインデックス
+	rooms                        []Room
+	maxEnemies                   int
+	floor                        int
 
 	menuOpen   bool
 	menuCursor int
@@ -52,8 +100,7 @@ type GameScene struct {
 	mapItems  []MapItem
 	inventory []InventoryEntry
 
-	frame            int // 毎フレームインクリメント（アニメ用）
-	playerAttackAnim int // プレイヤー攻撃アニメ残りフレーム数
+	frame int // 毎フレームインクリメント（アニメ用）
 
 	confirmQuit bool // タイトルへ戻る確認ダイアログ表示中
 }
@@ -65,7 +112,11 @@ func NewGameScene() *GameScene {
 
 func newGameSceneWithState(hp, turnCount, floor int, hasTreasure bool, fromBelow bool, inventory []InventoryEntry, log []string, level, xp, nextXP, str, wis, fai, vit, agi, luk int) *GameScene {
 	g := &GameScene{
-		playerHP:    hp,
+		Player: Actor{
+			HP:    hp,
+			MaxHP: playerMaxHP + vit*2,
+			Dir:   DirDown,
+		},
 		MaxMP:       5 + wis*5,
 		MP:          5 + wis*5,
 		turnCount:   turnCount,
@@ -89,8 +140,8 @@ func newGameSceneWithState(hp, turnCount, floor int, hasTreasure bool, fromBelow
 		for x := 0; x < mapWidth; x++ {
 			for y := 0; y < mapHeight; y++ {
 				if g.worldMap[x][y] == StairsDown {
-					g.playerX = x
-					g.playerY = y
+					g.Player.X = x
+					g.Player.Y = y
 				}
 			}
 		}
@@ -124,7 +175,7 @@ func (g *GameScene) gainXP(amount int) {
 		// 10 * (level ^ 1.5)
 		g.XPToNext = int(10 * math.Pow(float64(g.Level), 1.5))
 		g.pushMessage(fmt.Sprintf("レベル %d に上がった！", g.Level))
-		
+
 		// ステータス上昇
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		g.rollStatsUp(rng)
@@ -137,22 +188,31 @@ func (g *GameScene) rollStatsUp(rng *rand.Rand) {
 	for i := 0; i < count; i++ {
 		stat := rng.Intn(6)
 		switch stat {
-		case 0: g.Str++; g.pushMessage("力が少し上がった！")
-		case 1: g.Wis++; g.pushMessage("知恵が少し上がった！")
-		case 2: g.Fai++; g.pushMessage("信仰心が少し上がった！")
-		case 3: 
+		case 0:
+			g.Str++
+			g.pushMessage("力が少し上がった！")
+		case 1:
+			g.Wis++
+			g.pushMessage("知恵が少し上がった！")
+		case 2:
+			g.Fai++
+			g.pushMessage("信仰心が少し上がった！")
+		case 3:
 			g.Vit++
-			g.playerHP += 2
+			g.Player.HP += 2
+			g.Player.MaxHP += 2
 			g.pushMessage("生命力が少し上がった！")
-		case 4: g.Agi++; g.pushMessage("素早さが少し上がった！")
-		case 5: g.Luk++; g.pushMessage("運が少し上がった！")
+		case 4:
+			g.Agi++
+			g.pushMessage("素早さが少し上がった！")
+		case 5:
+			g.Luk++
+			g.pushMessage("運が少し上がった！")
 		}
 	}
 }
 
 func (g *GameScene) tryDodge(acc int) bool {
-	// evasionChance = Agi * 2 + Luk / 2 (max 80%)
-	// 命中率(acc)で補正する (例: 命中が低いほど回避しやすい)
 	dodgeChance := (g.Agi*2 + g.Luk/2) + (100 - acc)
 	if dodgeChance > 80 {
 		dodgeChance = 80
@@ -168,16 +228,75 @@ func (g *GameScene) pushMessage(msg string) {
 	}
 }
 
-func (g *GameScene) Update() (Scene, error) {
-	g.frame++
-	// アニメカウンタを進める
-	if g.playerAttackAnim > 0 {
-		g.playerAttackAnim--
+// カメラのオフセットを計算する
+func (g *GameScene) cameraOffset() (float64, float64) {
+	camX := float64(g.Player.X*tileSize - screenWidth/2 + tileSize/2)
+	camY := float64(g.Player.Y*tileSize - gameplayAreaHeight/2 + tileSize/2)
+
+	if camX < 0 {
+		camX = 0
+	}
+	if camY < 0 {
+		camY = 0
+	}
+	maxCamX := float64(mapWidth*tileSize - screenWidth)
+	maxCamY := float64(mapHeight*tileSize - gameplayAreaHeight)
+	if camX > maxCamX {
+		camX = maxCamX
+	}
+	if camY > maxCamY {
+		camY = maxCamY
+	}
+	return camX, camY
+}
+
+func (g *GameScene) isAnyAnimating() bool {
+	if g.Player.AttackAnim > 0 || g.Player.DamageAnim > 0 {
+		return true
+	}
+	for _, e := range g.enemies {
+		if e.AttackAnim > 0 || e.DamageAnim > 0 {
+			return true
+		}
+	}
+	if len(g.projectiles) > 0 {
+		return true
+	}
+	return false
+}
+
+func (g *GameScene) updateAnimations() {
+	if g.Player.AttackAnim > 0 {
+		g.Player.AttackAnim--
+	}
+	if g.Player.DamageAnim > 0 {
+		g.Player.DamageAnim--
 	}
 	for i := range g.enemies {
-		if g.enemies[i].attackAnim > 0 {
-			g.enemies[i].attackAnim--
+		if g.enemies[i].AttackAnim > 0 {
+			g.enemies[i].AttackAnim--
 		}
+		if g.enemies[i].DamageAnim > 0 {
+			g.enemies[i].DamageAnim--
+		}
+	}
+}
+
+func (g *GameScene) Update() (Scene, error) {
+	g.frame++
+
+	newProjectiles := []Projectile{}
+	for _, p := range g.projectiles {
+		p.Frame++
+		if p.Frame < p.TotalFrames {
+			newProjectiles = append(newProjectiles, p)
+		}
+	}
+	g.projectiles = newProjectiles
+
+	if g.isAnyAnimating() {
+		g.updateAnimations()
+		return nil, nil
 	}
 
 	if g.playState == StateWin || g.playState == StateDead {
@@ -189,7 +308,6 @@ func (g *GameScene) Update() (Scene, error) {
 		}
 		return nil, nil
 	}
-
 	if g.confirmQuit {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyN) {
 			g.confirmQuit = false
@@ -199,14 +317,17 @@ func (g *GameScene) Update() (Scene, error) {
 		return nil, nil
 	}
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-		if g.menuOpen {
-			g.menuOpen = false
-			return nil, nil
-		}
-		g.confirmQuit = true
-		return nil, nil
+	switch g.turnState {
+	case TurnPlayerInput:
+		return g.updatePlayerTurn()
+	case TurnEnemyAct:
+		g.updateEnemyTurns()
 	}
+
+	return nil, nil
+}
+
+func (g *GameScene) updatePlayerTurn() (Scene, error) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyH) {
 		return &HelpScene{prev: g}, nil
 	}
@@ -219,8 +340,18 @@ func (g *GameScene) Update() (Scene, error) {
 	if inpututil.IsKeyJustPressed(ebiten.KeyL) {
 		return &LogScene{game: g}, nil
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		return &MapScene{game: g}, nil
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		if g.menuOpen {
+			g.menuOpen = false
+			return nil, nil
+		}
+		g.confirmQuit = true
+		return nil, nil
+	}
 
-	// アクションメニュー
 	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
 		g.menuOpen = !g.menuOpen
 		if g.menuOpen {
@@ -237,7 +368,12 @@ func (g *GameScene) Update() (Scene, error) {
 			g.menuCursor = (g.menuCursor + 1) % len(g.menuItems)
 		}
 		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeySpace) {
-			return g.execMenuItem()
+			scene, err := g.execMenuItem()
+			if scene != nil || err != nil {
+				return scene, err
+			}
+			g.turnState = TurnEnemyAct
+			g.activeEnemyIdx = 0
 		}
 		return nil, nil
 	}
@@ -246,60 +382,60 @@ func (g *GameScene) Update() (Scene, error) {
 	var dirPressed bool
 	if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		newDir, dirPressed = DirLeft, true
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) || inpututil.IsKeyJustPressed(ebiten.KeyD) {
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) || inpututil.IsKeyJustPressed(ebiten.KeyD) {
 		newDir, dirPressed = DirRight, true
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
 		newDir, dirPressed = DirUp, true
-	} else if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
 		newDir, dirPressed = DirDown, true
 	}
 
 	if dirPressed {
+		g.Player.Dir = newDir
 		dx, dy := newDir.delta()
-		newX, newY := g.playerX+dx, g.playerY+dy
-
-		// 向きは常に更新
-		g.playerDir = newDir
-
-		if newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight {
-			if g.worldMap[newX][newY] != Wall {
+		nx, ny := g.Player.X+dx, g.Player.Y+dy
+		if nx >= 0 && nx < mapWidth && ny >= 0 && ny < mapHeight {
+			if g.worldMap[nx][ny] != Wall {
 				g.turnCount++
-				if g.isEnemyAt(newX, newY) {
-					// 正面の敵を攻撃（移動しない）
-					g.playerAttackAnim = attackAnimFrames
-					g.attackEnemy(newX, newY)
+				if g.isEnemyAt(nx, ny) {
+					g.Player.AttackAnim = attackAnimFrames
+					g.attackEnemy(nx, ny)
 				} else {
-					// 移動
-					g.playerX = newX
-					g.playerY = newY
+					g.Player.X, g.Player.Y = nx, ny
 					g.updateVisibility()
 				}
-				// 敵のターン
-				g.moveEnemies()
-				if g.playState == StateDead {
-					return nil, nil
-				}
-				g.trySpawnEnemyPerTurn()
-			} else {
-				// 壁でも向きだけ変える（ターン消費なし）
+				g.turnState = TurnEnemyAct
+				g.activeEnemyIdx = 0
 			}
 		}
 	}
-
 	return nil, nil
 }
 
+func (g *GameScene) updateEnemyTurns() {
+	if g.activeEnemyIdx >= len(g.enemies) {
+		g.turnState = TurnPlayerInput
+		if g.MP < g.MaxMP {
+			g.MP++
+		}
+		g.trySpawnEnemyPerTurn()
+		return
+	}
+	g.moveSingleEnemy(g.activeEnemyIdx)
+	g.activeEnemyIdx++
+}
+
 func (g *GameScene) updateVisibility() {
-	// visible をリセット
 	for x := 0; x < mapWidth; x++ {
 		for y := 0; y < mapHeight; y++ {
 			g.visible[x][y] = false
 		}
 	}
-
 	roomIdx := g.playerRoom()
 	if roomIdx >= 0 {
-		// 部屋内：部屋全体 + 部屋の外周1マスを visible に
 		r := g.rooms[roomIdx]
 		for x := r.x - 1; x < r.x+r.w+1; x++ {
 			for y := r.y - 1; y < r.y+r.h+1; y++ {
@@ -309,19 +445,15 @@ func (g *GameScene) updateVisibility() {
 			}
 		}
 	} else {
-		// 通路：自マス + 周囲1マス（8方向）
 		for dx := -1; dx <= 1; dx++ {
 			for dy := -1; dy <= 1; dy++ {
-				x := g.playerX + dx
-				y := g.playerY + dy
+				x, y := g.Player.X+dx, g.Player.Y+dy
 				if x >= 0 && x < mapWidth && y >= 0 && y < mapHeight {
 					g.visible[x][y] = true
 				}
 			}
 		}
 	}
-
-	// visible になったタイルは explored にも追加
 	for x := 0; x < mapWidth; x++ {
 		for y := 0; y < mapHeight; y++ {
 			if g.visible[x][y] {
@@ -332,29 +464,28 @@ func (g *GameScene) updateVisibility() {
 }
 
 func (g *GameScene) checkTile() (Scene, error) {
-	tile := g.worldMap[g.playerX][g.playerY]
+	tile := g.worldMap[g.Player.X][g.Player.Y]
 	switch tile {
-	case Stairs: // フロア0の出口：宝持参でクリア
+	case Stairs:
 		if g.hasTreasure {
 			g.playState = StateWin
-			g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d（ターン: %d / HP: %d）", g.calcScore(), g.turnCount, g.playerHP))
+			g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d（ターン: %d / HP: %d）", g.calcScore(), g.turnCount, g.Player.HP))
 			playSFX(sfxStairUpPCM)
 		} else {
 			g.pushMessage("宝がない！まだ帰れない。")
 		}
-	case StairsUp: // フロア1・2：1つ上のフロアへ（下り階段位置にスポーン）
+	case StairsUp:
 		playSFX(sfxStairUpPCM)
-		return newGameSceneWithState(g.playerHP, g.turnCount, g.floor-1, g.hasTreasure, true, g.inventory, g.messageLog, g.Level, g.XP, g.XPToNext, g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), nil
-	case StairsDown: // 下のフロアへ（上り階段位置にスポーン）
+		return newGameSceneWithState(g.Player.HP, g.turnCount, g.floor-1, g.hasTreasure, true, g.inventory, g.messageLog, g.Level, g.XP, g.XPToNext, g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), nil
+	case StairsDown:
 		playSFX(sfxStairDownPCM)
-		return newGameSceneWithState(g.playerHP, g.turnCount, g.floor+1, g.hasTreasure, false, g.inventory, g.messageLog, g.Level, g.XP, g.XPToNext, g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), nil
+		return newGameSceneWithState(g.Player.HP, g.turnCount, g.floor+1, g.hasTreasure, false, g.inventory, g.messageLog, g.Level, g.XP, g.XPToNext, g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), nil
 	}
 	return nil, nil
 }
 
-// スコア算出: (残りHP * 100 - ターン数) * 階層数（最低0）
 func (g *GameScene) calcScore() int {
-	base := g.playerHP*100 - g.turnCount
+	base := g.Player.HP*100 - g.turnCount
 	if base < 0 {
 		base = 0
 	}

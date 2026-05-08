@@ -160,10 +160,27 @@
   {
     "id": "treasure",
     "name": "伝説の宝",
-    "desc": "持ち帰るべき伝説の宝。大切に持ち帰ろう。",
-    "effect_desc": "宝",
+    "desc": "持ち帰るべき伝説の宝。非常に軽い。",
+    "effect_desc": "持ち帰り用",
     "weight": 1,
     "rarity": 100,
     "color": "#FFD700"
+  },
+  {
+    "id": "thunder_staff",
+    "name": "雷の杖",
+    "desc": "稲妻を放つ杖。遠くの敵を射抜くことができる。",
+    "effect_desc": "MP -4  遠距離攻撃",
+    "weight": 4,
+    "rarity": 4,
+    "color": "#00FFFF",
+    "effect": {
+      "type": "ranged_magic",
+      "cost": 4,
+      "damage": 8,
+      "range": 6,
+      "message": "雷光が奔った！",
+      "color": "#00FFFF"
+    }
   }
   ]

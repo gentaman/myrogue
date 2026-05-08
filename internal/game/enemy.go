@@ -98,37 +98,35 @@ func init() {
 
 // Enemy は敵キャラクターを表す
 type Enemy struct {
-	x, y       int
-	dir        Dir
-	attackAnim int        // 攻撃アニメ残りフレーム数
-	state      EnemyState // 警戒状態
-	hp         int
-	kind       EnemyKind
+	Actor
+	state EnemyState // 警戒状態
+	kind  EnemyKind
 }
 
 func (g *GameScene) isEnemyAt(x, y int) bool {
 	for _, e := range g.enemies {
-		if e.x == x && e.y == y {
+		if e.X == x && e.Y == y {
 			return true
 		}
 	}
 	return false
 }
 
-// プレイヤーが敵を攻撃（移動先の敵を倒す）
+// プレイヤーが敵を攻撃
 func (g *GameScene) attackEnemy(x, y int) {
-	damage := 1 + g.equippedAtk()
+	damage := 1 + g.Str + g.equippedAtk()
 	for i := range g.enemies {
 		e := &g.enemies[i]
-		if e.x == x && e.y == y {
+		if e.X == x && e.Y == y {
 			def := &enemyDefs[e.kind]
-			e.hp -= damage
-			if e.hp <= 0 {
-				g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
+			e.HP -= damage
+			e.DamageAnim = damageAnimFrames
+			if e.HP <= 0 {
 				g.pushMessage(fmt.Sprintf("%sを倒した！", def.name))
 				g.gainXP(def.xp)
+				g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
 			} else {
-				g.pushMessage(fmt.Sprintf("%sに%dのダメージを与えた！", def.name, damage))
+				g.pushMessage(fmt.Sprintf("%sに %d のダメージを与えた！", def.name, damage))
 			}
 			playSFXHit()
 			return
@@ -150,37 +148,32 @@ func dirFromDelta(dx, dy int) Dir {
 	}
 }
 
-// 敵がプレイヤーを視認できるか判定する。
-// 同じ部屋にいるか、通路上で水平/垂直の直線上に壁なく並んでいる場合に true。
+// 敵がプレイヤーを視認できるか判定する
 func (g *GameScene) canSeePlayer(e *Enemy) bool {
-	er := g.roomOf(e.x, e.y)
-	pr := g.roomOf(g.playerX, g.playerY)
-
-	// 同じ部屋にいる
+	er := g.roomOf(e.X, e.Y)
+	pr := g.roomOf(g.Player.X, g.Player.Y)
 	if er != -1 && er == pr {
 		return true
 	}
-
-	// 通路上での水平/垂直 LOS
-	if e.x == g.playerX {
-		minY, maxY := e.y, g.playerY
+	if e.X == g.Player.X {
+		minY, maxY := e.Y, g.Player.Y
 		if minY > maxY {
 			minY, maxY = maxY, minY
 		}
 		for y := minY + 1; y < maxY; y++ {
-			if g.worldMap[e.x][y] == Wall {
+			if g.worldMap[e.X][y] == Wall {
 				return false
 			}
 		}
 		return true
 	}
-	if e.y == g.playerY {
-		minX, maxX := e.x, g.playerX
+	if e.Y == g.Player.Y {
+		minX, maxX := e.X, g.Player.X
 		if minX > maxX {
 			minX, maxX = maxX, minX
 		}
 		for x := minX + 1; x < maxX; x++ {
-			if g.worldMap[x][e.y] == Wall {
+			if g.worldMap[x][e.Y] == Wall {
 				return false
 			}
 		}
@@ -189,8 +182,7 @@ func (g *GameScene) canSeePlayer(e *Enemy) bool {
 	return false
 }
 
-// BFS で (startX,startY) から (goalX,goalY) への次の1マスを返す。
-// 到達不能なら (startX,startY) を返す。
+// BFS で (startX,startY) から (goalX,goalY) への次の1マスを返す
 func (g *GameScene) bfsNextStep(startX, startY, goalX, goalY int) (int, int) {
 	if startX == goalX && startY == goalY {
 		return startX, startY
@@ -225,90 +217,78 @@ func (g *GameScene) bfsNextStep(startX, startY, goalX, goalY int) (int, int) {
 	if !found {
 		return startX, startY
 	}
-	// 経路を逆トレースして start の次のマスを返す
 	cur := pos{goalX, goalY}
 	for prev[cur.x][cur.y] != (pos{startX, startY}) {
 		cur = prev[cur.x][cur.y]
-		if cur.x == startX && cur.y == startY {
-			return startX, startY
-		}
 	}
 	return cur.x, cur.y
 }
 
-// 敵の移動（視界内ならBFS追跡、視界外はランダム移動。正面に隣接時は攻撃）
-func (g *GameScene) moveEnemies() {
-	dirList := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+// 個別の敵の行動を処理
+func (g *GameScene) moveSingleEnemy(idx int) {
+	if idx >= len(g.enemies) {
+		return
+	}
+	e := &g.enemies[idx]
+	def := &enemyDefs[e.kind]
 
-	for i := range g.enemies {
-		e := &g.enemies[i]
-		def := &enemyDefs[e.kind]
-
-		// 正面にプレイヤーがいるなら攻撃（移動より先に判定）
-		fdx, fdy := e.dir.delta()
-		if e.x+fdx == g.playerX && e.y+fdy == g.playerY {
-			e.attackAnim = attackAnimFrames
-			
-			if g.tryDodge(def.acc) {
-				g.pushMessage(fmt.Sprintf("%sの攻撃をかわした！", def.name))
+	// 正面にプレイヤーがいるなら攻撃
+	fdx, fdy := e.Dir.delta()
+	if e.X+fdx == g.Player.X && e.Y+fdy == g.Player.Y {
+		e.AttackAnim = attackAnimFrames
+		if g.tryDodge(def.acc) {
+			g.pushMessage(fmt.Sprintf("%sの攻撃をかわした！", def.name))
+		} else {
+			damage := def.atk - (g.equippedDef() + g.Vit)
+			if damage < 0 {
+				damage = 0
+			}
+			g.Player.HP -= damage
+			g.Player.DamageAnim = damageAnimFrames
+			playSFXHit()
+			if g.Player.HP <= 0 {
+				g.Player.HP = 0
+				g.playState = StateDead
+				g.pushMessage("力尽きた...")
+				return
+			}
+			if damage > 0 {
+				g.pushMessage(fmt.Sprintf("%sに攻撃された！ %d のダメージ！ HP: %d", def.name, damage, g.Player.HP))
 			} else {
-				damage := def.atk - g.equippedDef()
-				if damage < 0 {
-					damage = 0
-				}
-				g.playerHP -= damage
-				playSFXHit()
-				if g.playerHP <= 0 {
-					g.playerHP = 0
-					g.playState = StateDead
-					g.pushMessage("力尽きた...")
-					return
-				}
-				if damage > 0 {
-					g.pushMessage(fmt.Sprintf("%sに攻撃された！ %dのダメージ！ HP: %d", def.name, damage, g.playerHP))
-				} else {
-					g.pushMessage(fmt.Sprintf("%sの攻撃を弾き返した！", def.name))
-				}
-			}
-			continue
-		}
-
-		// 視界チェックでステートを更新
-		if g.canSeePlayer(e) {
-			e.state = EnemyAlerted
-		} else {
-			e.state = EnemyIdle
-		}
-
-		var nx, ny int
-		if e.state == EnemyAlerted {
-			// 警戒中: BFS 最短経路の次の1マスへ
-			nx, ny = g.bfsNextStep(e.x, e.y, g.playerX, g.playerY)
-		} else {
-			// 未発見: ランダム移動（通行可能なマスから選ぶ）
-			candidates := dirList
-			rand.Shuffle(len(candidates), func(a, b int) { candidates[a], candidates[b] = candidates[b], candidates[a] })
-			nx, ny = e.x, e.y
-			for _, d := range candidates {
-				cx, cy := e.x+d[0], e.y+d[1]
-				if cx >= 0 && cx < mapWidth && cy >= 0 && cy < mapHeight && g.worldMap[cx][cy] != Wall {
-					nx, ny = cx, cy
-					break
-				}
+				g.pushMessage(fmt.Sprintf("%sの攻撃を弾き返した！", def.name))
 			}
 		}
+		return
+	}
 
-		if nx == e.x && ny == e.y {
-			continue
+	// 視界チェック
+	if g.canSeePlayer(e) {
+		e.state = EnemyAlerted
+	} else {
+		e.state = EnemyIdle
+	}
+
+	var nx, ny int
+	if e.state == EnemyAlerted {
+		nx, ny = g.bfsNextStep(e.X, e.Y, g.Player.X, g.Player.Y)
+	} else {
+		dirList := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+		candidates := dirList
+		rand.Shuffle(len(candidates), func(a, b int) { candidates[a], candidates[b] = candidates[b], candidates[a] })
+		nx, ny = e.X, e.Y
+		for _, d := range candidates {
+			cx, cy := e.X+d[0], e.Y+d[1]
+			if cx >= 0 && cx < mapWidth && cy >= 0 && cy < mapHeight && g.worldMap[cx][cy] != Wall {
+				nx, ny = cx, cy
+				break
+			}
 		}
+	}
 
-		// 向きを移動方向に更新
-		e.dir = dirFromDelta(nx-e.x, ny-e.y)
-
-		// 移動先にプレイヤーや他の敵がいなければ移動
-		if !g.isEnemyAt(nx, ny) && !(nx == g.playerX && ny == g.playerY) {
-			e.x = nx
-			e.y = ny
+	if nx != e.X || ny != e.Y {
+		e.Dir = dirFromDelta(nx-e.X, ny-e.Y)
+		if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) {
+			e.X, e.Y = nx, ny
 		}
 	}
 }
@@ -319,4 +299,3 @@ func abs(x int) int {
 	}
 	return x
 }
-

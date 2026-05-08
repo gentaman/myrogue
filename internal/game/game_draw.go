@@ -2,23 +2,42 @@ package game
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func (g *GameScene) Draw(screen *ebiten.Image) {
+	sw, sh := screen.Size()
+
+	// 1. ゲームプレイエリア（上部 5/6）
+	upperRect := image.Rect(0, 0, sw, gameplayAreaHeight)
+	upperScreen := screen.SubImage(upperRect).(*ebiten.Image)
+
+	// 2. UIエリア（下部 1/6）
+	lowerRect := image.Rect(0, gameplayAreaHeight, sw, sh)
+	lowerScreen := screen.SubImage(lowerRect).(*ebiten.Image)
+
+	// それぞれの領域に対して描画
+	g.drawWorld(upperScreen)
+	g.drawUI(lowerScreen, float64(gameplayAreaHeight))
+
+	// 3. ダイアログ・メニュー（全画面オーバーレイ）
+	g.drawOverlays(screen)
+}
+
+func (g *GameScene) drawWorld(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{20, 20, 20, 255})
+	camX, camY := g.cameraOffset()
 
 	// マップ描画
-	// visible: 明るい色 / explored のみ: 暗い色（静的要素のみ）
 	for x := 0; x < mapWidth; x++ {
 		for y := 0; y < mapHeight; y++ {
 			if !g.explored[x][y] {
 				continue
 			}
 			vis := g.visible[x][y]
-
 			var clr color.Color
 			if vis {
 				switch g.worldMap[x][y] {
@@ -34,7 +53,6 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 					clr = color.RGBA{0, 220, 180, 255}
 				}
 			} else {
-				// 記憶中（暗め）
 				switch g.worldMap[x][y] {
 				case Wall:
 					clr = color.RGBA{50, 50, 55, 255}
@@ -48,16 +66,15 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 					clr = color.RGBA{0, 110, 90, 255}
 				}
 			}
-
-			rect := ebiten.NewImage(tileSize-1, tileSize-1)
+			rect := ebiten.NewImage(tileSize-2, tileSize-2)
 			rect.Fill(clr)
 			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Translate(float64(x*tileSize), float64(y*tileSize))
+			op.GeoM.Translate(float64(x*tileSize+1)-camX, float64(y*tileSize+1)-camY)
 			screen.DrawImage(rect, op)
 		}
 	}
 
-	// アイテム描画（explored: 常に表示、visible で色を変える）
+	// アイテム描画
 	for _, it := range g.mapItems {
 		if !g.explored[it.x][it.y] {
 			continue
@@ -65,77 +82,114 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		def := itemDefs[it.kind]
 		clr := def.clr
 		if !g.visible[it.x][it.y] {
-			// 記憶中は暗く
 			clr = color.RGBA{clr.R / 2, clr.G / 2, clr.B / 2, 255}
 		}
-		iRect := ebiten.NewImage(tileSize-5, tileSize-5)
+		iRect := ebiten.NewImage(tileSize-16, tileSize-16)
 		iRect.Fill(clr)
 		iOp := &ebiten.DrawImageOptions{}
-		iOp.GeoM.Translate(float64(it.x*tileSize+2), float64(it.y*tileSize+2))
+		iOp.GeoM.Translate(float64(it.x*tileSize+8)-camX, float64(it.y*tileSize+8)-camY)
 		screen.DrawImage(iRect, iOp)
 	}
 
-	// 敵描画（visible のみ）
+	// 敵描画
 	for _, e := range g.enemies {
-		if !g.visible[e.x][e.y] {
+		if !g.visible[e.X][e.Y] {
 			continue
 		}
 		def := &enemyDefs[e.kind]
-		ox, oy, sz := charAnim(g.frame, e.attackAnim, e.dir)
-		eRect := ebiten.NewImage(sz, sz)
-
-		eClr := def.clr
-		eRect.Fill(eClr)
-		eOp := &ebiten.DrawImageOptions{}
-		eOp.GeoM.Translate(float64(e.x*tileSize+ox), float64(e.y*tileSize+oy))
-		screen.DrawImage(eRect, eOp)
-
-		// 向きドットの描画（警戒時は赤系で激しく点滅）
+		g.drawActor(screen, &e.Actor, nil, def.clr, camX, camY)
 		var dotClr color.RGBA
 		if e.state == EnemyAlerted {
-			// 10フレーム周期で点滅
 			if (g.frame/5)%2 == 0 {
 				dotClr = color.RGBA{255, 50, 50, 255}
 			} else {
 				dotClr = color.RGBA{255, 200, 200, 255}
 			}
 		} else {
-			// 通常時は白系でゆるやかに明滅
 			alpha := uint8(180 + 40*(g.frame/30%2))
 			dotClr = color.RGBA{255, 255, 255, alpha}
 		}
-		drawDirDot(screen, e.x, e.y, e.dir, dotClr)
+		drawDirDot(screen, e.X, e.Y, e.Dir, dotClr, camX, camY)
 	}
 
 	// プレイヤー描画
-	playerClr := color.RGBA{255, 100, 100, 255}
-	dotClr := color.RGBA{255, 255, 255, 255}
-	if g.hasTreasure {
-		playerClr = color.RGBA{255, 255, 100, 255}
-		dotClr = color.RGBA{64, 64, 64, 255}
-	}
-	pox, poy, psz := charAnim(g.frame, g.playerAttackAnim, g.playerDir)
-	pRect := ebiten.NewImage(psz, psz)
-	pRect.Fill(playerClr)
-	pOp := &ebiten.DrawImageOptions{}
-	pOp.GeoM.Translate(float64(g.playerX*tileSize+pox), float64(g.playerY*tileSize+poy))
-	screen.DrawImage(pRect, pOp)
-	drawDirDot(screen, g.playerX, g.playerY, g.playerDir, dotClr)
+	g.drawActor(screen, &g.Player, playerImage, color.White, camX, camY)
+	drawDirDot(screen, g.Player.X, g.Player.Y, g.Player.Dir, color.RGBA{255, 255, 255, 255}, camX, camY)
 
-	// アクションメニュー
+	// 遠隔攻撃
+	for _, p := range g.projectiles {
+		t := float64(p.Frame) / float64(p.TotalFrames)
+		curX := p.StartX + (p.EndX-p.StartX)*t
+		curY := p.StartY + (p.EndY-p.StartY)*t
+		pRect := ebiten.NewImage(8, 8)
+		pRect.Fill(p.Color)
+		pOp := &ebiten.DrawImageOptions{}
+		pOp.GeoM.Translate(curX-camX-4, curY-camY-4)
+		screen.DrawImage(pRect, pOp)
+	}
+}
+
+func (g *GameScene) drawActor(screen *ebiten.Image, a *Actor, img *ebiten.Image, fallbackColor color.Color, camX, camY float64) {
+	if a.DamageAnim > 0 && (a.DamageAnim/4)%2 == 0 {
+		return
+	}
+	ox, oy, _ := charAnim(g.frame, a.AttackAnim, a.Dir)
+	if img != nil {
+		dirOffset := 0
+		switch a.Dir {
+		case DirDown:
+			dirOffset = 0
+		case DirUp:
+			dirOffset = 1
+		case DirRight:
+			dirOffset = 2
+		case DirLeft:
+			dirOffset = 3
+		}
+		frame := (g.frame / 10) % 3
+		sx, sy := dirOffset*32, frame*32
+		rect := image.Rect(sx, sy, sx+32, sy+32)
+		sub := img.SubImage(rect).(*ebiten.Image)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(a.X*tileSize+ox*2)-camX, float64(a.Y*tileSize+oy*2)-camY)
+		screen.DrawImage(sub, op)
+	} else {
+		rect := ebiten.NewImage(tileSize, tileSize)
+		rect.Fill(fallbackColor)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(float64(a.X*tileSize+ox*2)-camX, float64(a.Y*tileSize+oy*2)-camY)
+		screen.DrawImage(rect, op)
+	}
+}
+
+func (g *GameScene) drawUI(screen *ebiten.Image, offsetY float64) {
+	screen.Fill(color.RGBA{0, 0, 0, 255})
+	statusY := offsetY + 8
+	hpClr := color.RGBA{200, 200, 200, 255}
+	if g.Player.HP <= (g.Player.MaxHP)/4 {
+		hpClr = color.RGBA{255, 80, 80, 255}
+	}
+	wt := g.currentWeight()
+	drawText(screen, fmt.Sprintf("フロア: %d  ターン: %d", g.floor+1, g.turnCount), fontFace12, 8, int(statusY), color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("Lv: %d  XP: %d / %d", g.Level, g.XP, g.XPToNext), fontFace12, 160, int(statusY), color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("HP: %d / %d  MP: %d / %d", g.Player.HP, g.Player.MaxHP, g.MP, g.MaxMP), fontFace12, 8, int(statusY+16), hpClr, false)
+	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d", 1+g.Str+g.equippedAtk(), g.equippedDef()+g.Vit, wt, maxCarryWeight), fontFace12, 160, int(statusY+16), color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), fontFace12, 8, int(statusY+32), color.RGBA{150, 150, 150, 255}, false)
+	drawText(screen, g.message, fontFace14, 8, int(statusY+48), color.RGBA{255, 255, 255, 255}, false)
+	drawText(screen, "H: ヘルプ", fontFace12, screenWidth-80, int(statusY), color.RGBA{100, 100, 100, 255}, false)
+}
+
+func (g *GameScene) drawOverlays(screen *ebiten.Image) {
 	if g.menuOpen {
 		const (
 			rowH      = 32
-			padX      = 48 // 左余白（▶ + ラベル開始位置）
+			padX      = 48
 			padRight  = 16
 			headerH   = 44
 			footerH   = 28
 			minPanelW = 240
 			maxPanelW = screenWidth - 20
 		)
-
-		// 動的パネル幅: 最長ラベル幅に合わせる
-		hintW := measureText("W/S: 選択  Enter: 決定  X/Esc: 閉じる", fontFace12)
 		panelW := minPanelW
 		for _, item := range g.menuItems {
 			w := measureText(item.label, fontFace14) + padX + padRight
@@ -143,26 +197,14 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 				panelW = w
 			}
 		}
-		if hintW+padRight > panelW {
-			panelW = hintW + padRight
-		}
-		if panelW > maxPanelW {
-			panelW = maxPanelW
-		}
-
-		// 動的パネル高: 全行収まるか、収まらなければスクロール
-		areaH := mapHeight * tileSize
-		needH := headerH + len(g.menuItems)*rowH + footerH
-		panelH := needH
-		if panelH > areaH-8 {
-			panelH = areaH - 8
+		panelH := headerH + len(g.menuItems)*rowH + footerH
+		if panelH > screenHeight-40 {
+			panelH = screenHeight - 40
 		}
 		visibleRows := (panelH - headerH - footerH) / rowH
 		if visibleRows < 1 {
 			visibleRows = 1
 		}
-
-		// スクロールオフセット（カーソルが見える範囲に収める）
 		scrollOffset := g.menuCursor - visibleRows + 1
 		if scrollOffset < 0 {
 			scrollOffset = 0
@@ -170,13 +212,9 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		if g.menuCursor < scrollOffset {
 			scrollOffset = g.menuCursor
 		}
-
-		panelX := (screenWidth - panelW) / 2
-		panelY := (areaH - panelH) / 2
-
+		panelX, panelY := (screenWidth-panelW)/2, (screenHeight-panelH)/2
 		drawPanel(screen, panelX, panelY, panelW, panelH, color.RGBA{20, 20, 50, 255}, color.RGBA{100, 150, 255, 255})
 		drawText(screen, "アクション", fontFace14, screenWidth/2, panelY+12, color.RGBA{255, 220, 100, 255}, true)
-
 		for i, item := range g.menuItems {
 			row := i - scrollOffset
 			if row < 0 || row >= visibleRows {
@@ -194,37 +232,28 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 				hlOp.GeoM.Translate(float64(panelX+4), float64(y-4))
 				screen.DrawImage(hl, hlOp)
 				clr = color.RGBA{255, 255, 255, 255}
-				if !item.enabled {
-					clr = color.RGBA{120, 120, 120, 255}
-				}
-				drawText(screen, "▶", fontFace12, panelX+14, y, clr, false)
 			}
-			labelMaxW := panelX + panelW - 16 - (panelX + 30)
-			drawText(screen, truncateText(item.label, fontFace14, labelMaxW), fontFace14, panelX+30, y, clr, false)
+			drawText(screen, item.label, fontFace14, panelX+30, y, clr, false)
 		}
 		drawText(screen, "W/S: 選択  Enter: 決定  X/Esc: 閉じる", fontFace12, screenWidth/2, panelY+panelH-20, color.RGBA{120, 120, 120, 255}, true)
 	}
-
-	// タイトルへ戻る確認ダイアログ
 	if g.confirmQuit {
 		const (
 			dW = 300
 			dH = 80
 			dX = (screenWidth - dW) / 2
-			dY = (mapHeight*tileSize - dH) / 2
+			dY = (screenHeight - dH) / 2
 		)
 		drawPanel(screen, dX, dY, dW, dH, color.RGBA{30, 20, 20, 255}, color.RGBA{200, 100, 100, 255})
 		drawText(screen, "タイトルへ戻りますか？", fontFace14, screenWidth/2, dY+14, color.RGBA{255, 220, 220, 255}, true)
 		drawText(screen, "Enter/Y: はい    Esc/N: いいえ", fontFace12, screenWidth/2, dY+46, color.RGBA{180, 180, 180, 255}, true)
 	}
-
-	// ゲームオーバー（勝利・敗北）ダイアログ
 	if g.playState == StateWin || g.playState == StateDead {
 		const (
 			dW = 360
 			dH = 120
 			dX = (screenWidth - dW) / 2
-			dY = (mapHeight*tileSize - dH) / 2
+			dY = (screenHeight - dH) / 2
 		)
 		var pClr, bClr color.RGBA
 		var title, sub string
@@ -232,12 +261,12 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 			pClr = color.RGBA{20, 40, 20, 255}
 			bClr = color.RGBA{100, 255, 100, 255}
 			title = "--- BEAT THE GAME ---"
-			sub = fmt.Sprintf("スコア: %d (ターン: %d / HP: %d)", g.calcScore(), g.turnCount, g.playerHP)
+			sub = fmt.Sprintf("スコア: %d", g.calcScore())
 		} else {
 			pClr = color.RGBA{40, 20, 20, 255}
 			bClr = color.RGBA{255, 100, 100, 255}
 			title = "--- GAME OVER ---"
-			sub = "あなたはダンジョンで力尽きた..."
+			sub = "あなたは力尽きた..."
 		}
 		drawPanel(screen, dX, dY, dW, dH, pClr, bClr)
 		drawText(screen, title, fontFace14, screenWidth/2, dY+20, bClr, true)
@@ -245,24 +274,6 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		drawText(screen, "R: 再挑戦    Esc: タイトルへ", fontFace12, screenWidth/2, dY+dH-25, color.RGBA{180, 180, 180, 255}, true)
 	}
 
-	// UIステータスバー（mapHeight*tileSize 以下の80px帯）
-	// 行1 (y+0):  フロア/ターン（左）  キーヒント（右）
-	// 行2 (y+16): HP  重量（左）
-	// 行3 (y+40): メッセージ
-	statusY := mapHeight*tileSize + 8
-
-	hpClr := color.RGBA{200, 200, 200, 255}
-	if g.playerHP <= playerMaxHP/4 {
-		hpClr = color.RGBA{255, 80, 80, 255}
-	}
-	wt := g.currentWeight()
-
-	drawText(screen, fmt.Sprintf("フロア: %d  ターン: %d", g.floor+1, g.turnCount), fontFace12, 8, statusY, color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("Lv: %d  XP: %d / %d", g.Level, g.XP, g.XPToNext), fontFace12, 160, statusY, color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("HP: %d / %d  MP: %d / %d", g.playerHP, playerMaxHP+g.Vit*2, g.MP, g.MaxMP), fontFace12, 8, statusY+16, hpClr, false)
-	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d  アイテム: %d", 1+g.Str+g.equippedAtk(), g.equippedDef()+g.Vit, wt, maxCarryWeight, len(g.inventory)), fontFace12, 160, statusY+16, color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), fontFace12, 8, statusY+32, color.RGBA{150, 150, 150, 255}, false)
-	drawText(screen, g.message, fontFace14, 8, statusY+48, color.RGBA{255, 255, 255, 255}, false)
-
-	drawText(screen, "H: ヘルプ", fontFace12, screenWidth-80, statusY, color.RGBA{100, 100, 100, 255}, false)
+	// デバッグ情報（ビルドタグ debug が有効なときのみ表示）
+	g.drawDebug(screen)
 }

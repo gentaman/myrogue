@@ -1,89 +1,93 @@
 package game
 
-import "fmt"
+// アクションメニューの項目
+type menuActionKind int
 
 const (
-	menuKindAttack = iota
+	menuKindAttack menuActionKind = iota
 	menuKindExamine
-	menuKindStairs
-	menuKindWait
 	menuKindItem
-	menuKindClose
+	menuKindWait
 )
 
 type actionItem struct {
+	kind    menuActionKind
 	label   string
 	enabled bool
-	kind    int
 }
 
-// 足元にアイテムがあるかチェック
+// 足元にアイテムがあるか判定
 func (g *GameScene) itemAtFeet() (int, bool) {
 	for i, it := range g.mapItems {
-		if it.x == g.playerX && it.y == g.playerY {
+		if it.x == g.Player.X && it.y == g.Player.Y {
 			return i, true
 		}
 	}
 	return -1, false
 }
 
-// プレイヤーの正面にいる敵を返す
+// 隣接する敵がいるか判定
 func (g *GameScene) adjacentEnemy() (int, int, bool) {
-	dx, dy := g.playerDir.delta()
-	nx, ny := g.playerX+dx, g.playerY+dy
+	dx, dy := g.Player.Dir.delta()
+	nx, ny := g.Player.X+dx, g.Player.Y+dy
 	if g.isEnemyAt(nx, ny) {
 		return nx, ny, true
 	}
-	return 0, 0, false
+	return -1, -1, false
 }
 
-// 現在地の階段種別を返す（なければ Wall）
+// 足元の階段の種類を返す
 func (g *GameScene) currentStairType() TileType {
-	t := g.worldMap[g.playerX][g.playerY]
-	switch t {
-	case Stairs, StairsUp, StairsDown:
+	t := g.worldMap[g.Player.X][g.Player.Y]
+	if t == Stairs || t == StairsUp || t == StairsDown {
 		return t
 	}
-	return Wall
+	return Wall // 便宜上 Wall を返す（階段ではない）
 }
 
-// 文脈に応じたアクションメニューを構築する
+// アクションメニューの選択項目を構築する
 func (g *GameScene) buildMenu() {
+	g.menuItems = []actionItem{}
+
+	// 攻撃
 	_, _, hasAdj := g.adjacentEnemy()
-	stair := g.currentStairType()
-	_, hasItem := g.itemAtFeet()
+	g.menuItems = append(g.menuItems, actionItem{
+		kind:    menuKindAttack,
+		label:   "正面を攻撃",
+		enabled: hasAdj,
+	})
 
-	var attackLabel string
-	if hasAdj {
-		attackLabel = "攻撃する"
+	// 調べる（拾う・階段）
+	label := "足元を調べる"
+	if _, found := g.itemAtFeet(); found {
+		label = "アイテムを拾う"
 	} else {
-		attackLabel = "攻撃する（正面に敵なし）"
+		switch g.currentStairType() {
+		case Stairs, StairsUp:
+			label = "上の階へ戻る"
+		case StairsDown:
+			label = "下の階へ進む"
+		}
 	}
+	g.menuItems = append(g.menuItems, actionItem{
+		kind:    menuKindExamine,
+		label:   label,
+		enabled: true,
+	})
 
-	var examineLabel string
-	if hasItem {
-		examineLabel = "足元のアイテムを拾う"
-	} else if stair != Wall {
-		examineLabel = "階段を調べる"
-	} else {
-		examineLabel = "調べる（何もなし）"
-	}
+	// アイテム
+	g.menuItems = append(g.menuItems, actionItem{
+		kind:    menuKindItem,
+		label:   "道具を使う",
+		enabled: len(g.inventory) > 0,
+	})
 
-	itemLabel := fmt.Sprintf("アイテムを使う（重量: %d/%d）", g.currentWeight(), maxCarryWeight)
-	if len(g.inventory) == 0 {
-		itemLabel = "アイテムを使う（所持なし）"
-	}
-
-	g.menuItems = []actionItem{
-		{label: attackLabel, enabled: hasAdj, kind: menuKindAttack},
-		{label: examineLabel, enabled: hasItem || stair != Wall, kind: menuKindExamine},
-		{label: itemLabel, enabled: len(g.inventory) > 0, kind: menuKindItem},
-		{label: "待機する（1ターン消費）", enabled: true, kind: menuKindWait},
-		{label: "閉じる", enabled: true, kind: menuKindClose},
-	}
-	if g.menuCursor >= len(g.menuItems) {
-		g.menuCursor = 0
-	}
+	// 待機
+	g.menuItems = append(g.menuItems, actionItem{
+		kind:    menuKindWait,
+		label:   "その場で待機",
+		enabled: true,
+	})
 }
 
 // アクションメニューの選択項目を実行する
@@ -97,16 +101,10 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 	case menuKindAttack:
 		ex, ey, _ := g.adjacentEnemy()
 		g.turnCount++
-		g.playerAttackAnim = attackAnimFrames
+		g.Player.AttackAnim = attackAnimFrames
 		g.attackEnemy(ex, ey)
-		g.moveEnemies()
-		if g.playState == StateDead {
-			return nil, nil
-		}
-		g.trySpawnEnemyPerTurn()
 	case menuKindExamine:
 		g.turnCount++
-		// アイテムがあれば拾う、なければ階段判定
 		if idx, found := g.itemAtFeet(); found {
 			g.pickupItem(idx)
 		} else if next, err := g.checkTile(); next != nil || err != nil {
@@ -114,25 +112,11 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 		} else {
 			g.pushMessage("特に何もない。")
 		}
-		g.moveEnemies()
-		if g.playState == StateDead {
-			return nil, nil
-		}
-		g.trySpawnEnemyPerTurn()
 	case menuKindItem:
 		return &InventoryScene{game: g}, nil
 	case menuKindWait:
 		g.turnCount++
 		g.pushMessage("待機した。")
-		// MP回復
-		if g.MP < g.MaxMP {
-			g.MP++
-		}
-		g.moveEnemies()
-		if g.playState == StateDead {
-			return nil, nil
-		}
-		g.trySpawnEnemyPerTurn()
 	}
 	return nil, nil
 }
