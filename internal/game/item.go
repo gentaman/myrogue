@@ -80,15 +80,10 @@ func (d *itemDef) entryName(entry InventoryEntry) string {
 var (
 	//go:embed assets/items.json
 	itemsJSON []byte
-	//go:embed assets/player.json
-	playerJSON []byte
 
 	itemDefs []itemDef
 
 	itemIDMap = map[string]ItemKind{}
-
-	playerMaxHP    int
-	maxCarryWeight int
 )
 
 type parameterizedEffectSpec struct {
@@ -123,16 +118,23 @@ type rawItem struct {
 	Effect     *parameterizedEffectSpec    `json:"effect"`
 }
 
+type playerCfg struct {
+	MaxHP          int `json:"hp"`
+	MaxCarryWeight int `json:"max_carry_weight"`
+}
+
 func init() {
-	var playerCfg struct {
-		MaxHP          int `json:"max_hp"`
-		MaxCarryWeight int `json:"max_carry_weight"`
-	}
-	if err := json.Unmarshal(playerJSON, &playerCfg); err != nil {
+	var playerCfgs []playerCfg
+
+	if err := json.Unmarshal(playerJSON, &playerCfgs); err != nil {
 		panic(fmt.Sprintf("failed to unmarshal player.json: %v", err))
 	}
-	playerMaxHP = playerCfg.MaxHP
-	maxCarryWeight = playerCfg.MaxCarryWeight
+	if len(playerCfgs) < 1 {
+		panic(fmt.Sprintf("player.json is empty"))
+	}
+
+	playerMaxHP = playerCfgs[0].MaxHP
+	maxCarryWeight = playerCfgs[0].MaxCarryWeight
 
 	var rawItems []rawItem
 	if err := json.Unmarshal(itemsJSON, &rawItems); err != nil {

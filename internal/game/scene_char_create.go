@@ -3,7 +3,6 @@ package game
 import (
 	"fmt"
 	"image/color"
-	"math"
 	"math/rand"
 	"time"
 
@@ -88,10 +87,11 @@ func (s *CharacterCreateScene) Update() (Scene, error) {
 
 func (s *CharacterCreateScene) startGame() Scene {
 	race := OrderedRaces[s.raceIdx]
+	def := playerDefs[0] // デフォルトの冒険者定義を使用
 
 	// レベルに応じた初期ステータスの計算（ランダム成長をシミュレート）
-	str, wis, fai, vit, agi, luk := 1, 1, 1, 1, 1, 1
-	hp := 20
+	str, wis, fai, vit, agi, luk := def.Str, def.Wis, def.Fai, def.Vit, def.Agi, def.Luk
+	hp := def.HP
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// レベル1は成長なし。2以上から成長
@@ -117,10 +117,9 @@ func (s *CharacterCreateScene) startGame() Scene {
 		}
 	}
 
-	// 次のレベルまでのXP
-	nextXP := int(10 * math.Pow(float64(s.level), 1.5))
-
-	return newGameSceneWithState(hp, 0, 0, false, nil, nil, s.level, 0, nextXP, str, wis, fai, vit, agi, luk, race)
+	// プレイヤー生成
+	p := NewUserPlayer("あなた", race, s.level, str, wis, fai, vit, agi, luk)
+	return newGameSceneWithState(p, 0, 0, false, nil)
 }
 
 func (s *CharacterCreateScene) Draw(screen *ebiten.Image) {

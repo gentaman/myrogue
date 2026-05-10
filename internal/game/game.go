@@ -174,6 +174,35 @@ func (a *UserPlayer) GetName() string {
 	return a.Name
 }
 
+func NewUserPlayer(name string, race Race, level int, str, wis, fai, vit, agi, luk int) *UserPlayer {
+	nextXP := int(10 * math.Pow(float64(level), 1.5))
+	hp := playerMaxHP + vit*2
+	mp := 5 + wis*5
+	return &UserPlayer{
+		Actor: Actor{
+			ID:        1,
+			HP:        hp,
+			MaxHP:     hp,
+			MP:        mp,
+			MaxMP:     mp,
+			Dir:       DirDown,
+			Element:   ElementNone,
+			Race:      race,
+			Level:     level,
+			XP:        0,
+			XPToNext:  nextXP,
+			Str:       str,
+			Wis:       wis,
+			Fai:       fai,
+			Vit:       vit,
+			Agi:       agi,
+			Luk:       luk,
+			Relations: make(map[int64]int),
+		},
+		Name: name,
+	}
+}
+
 // Projectile は遠隔攻撃のアニメーション体
 type Projectile struct {
 	StartX, StartY float64
@@ -273,34 +302,13 @@ func (g *GameScene) RemoveEnemy(ID int64) {
 }
 
 func NewGameScene() *GameScene {
-	return newGameSceneWithState(20, 0, 0, false, nil, nil, 1, 0, 10, 1, 1, 1, 1, 1, 1, RaceHuman)
+	p := NewUserPlayer("あなた", RaceHuman, 1, 1, 1, 1, 1, 1, 1)
+	return newGameSceneWithState(p, 0, 0, false, nil)
 }
 
-func newGameSceneWithState(hp, turnCount, floor int, fromBelow bool, inventory []InventoryEntry, log []string, level, xp, nextXP, str, wis, fai, vit, agi, luk int, race Race) *GameScene {
-	player := UserPlayer{
-		Actor: Actor{
-			ID:        1, // プレイヤーは固定ID 1
-			HP:        hp,
-			MaxHP:     playerMaxHP + vit*2,
-			Dir:       DirDown,
-			Element:   ElementNone,
-			Race:      race,
-			Inventory: inventory,
-			Level:     level,
-			XP:        xp,
-			XPToNext:  nextXP,
-			Str:       str,
-			Wis:       wis,
-			Fai:       fai,
-			Vit:       vit,
-			Agi:       agi,
-			Luk:       luk,
-			Relations: make(map[int64]int),
-		},
-		Name: "あなた",
-	}
+func newGameSceneWithState(player *UserPlayer, turnCount, floor int, fromBelow bool, log []string) *GameScene {
 	g := &GameScene{
-		Player:     &player,
+		Player:     player,
 		turnCount:  turnCount,
 		floor:      floor,
 		messageLog: log,
@@ -338,16 +346,14 @@ func newGameSceneWithState(hp, turnCount, floor int, fromBelow bool, inventory [
 	})
 	g.Bus.OnChangeFloor(func(msg MsgChangeFloor) {
 		if msg.Direction > 0 {
-			g.nextScene = newGameSceneWithState(g.Player.HP, g.turnCount, msg.CurrentFloor+1, false, g.Player.Inventory, g.messageLog, g.Player.Level, g.Player.XP, g.Player.XPToNext, g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk, g.Player.Race)
+			g.nextScene = newGameSceneWithState(g.Player, g.turnCount, msg.CurrentFloor+1, false, g.messageLog)
 		} else {
-			g.nextScene = newGameSceneWithState(g.Player.HP, g.turnCount, msg.CurrentFloor-1, true, g.Player.Inventory, g.messageLog, g.Player.Level, g.Player.XP, g.Player.XPToNext, g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk, g.Player.Race)
+			g.nextScene = newGameSceneWithState(g.Player, g.turnCount, msg.CurrentFloor-1, true, g.messageLog)
 		}
 	})
 	g.Bus.OnTransition(func(msg MsgTransition) {
 		g.nextScene = msg.Next
 	})
-	g.Player.MaxMP = 5 + g.Player.Wis*5
-	g.Player.MP = 5 + g.Player.Wis*5
 
 	g.generateMap()
 	if fromBelow {
@@ -395,6 +401,8 @@ func (g *GameScene) rollStatsUp(a *Actor, rng *rand.Rand) {
 		case 1:
 			a.Wis++
 			a.Wis = min(a.Wis, MaxWis)
+			a.MP += 5
+			a.MaxMP += 5
 		case 2:
 			a.Fai++
 			a.Fai = min(a.Fai, MaxFai)

@@ -69,7 +69,7 @@ func (s *DebugScene) refresh() {
 		s.lines = append(s.lines, fmt.Sprintf("=== ENEMIES (%d) ===", len(s.game.enemies)))
 		for i := range s.game.enemies {
 			e := &s.game.enemies[i]
-			s.lines = append(s.lines, fmt.Sprintf("[%d] %s (ID:%d)", i, enemyDefs[e.kind].name, e.ID))
+			s.lines = append(s.lines, fmt.Sprintf("[%d] %s (ID:%d)", i, enemyDefs[e.kind].Name, e.ID))
 			s.inspectStruct(*e)
 			s.lines = append(s.lines, "--------------------")
 		}

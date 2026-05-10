@@ -3,9 +3,6 @@
     "id": "slime",
     "name": "スライム",
     "hp": 2,
-    "atk": 1,
-    "acc": 80,
-    "def": 0,
     "element": "water",
     "race": "element",
     "personality": "cowardly",
@@ -26,9 +23,6 @@
     "id": "golden_slime",
     "name": "黄金のスライム",
     "hp": 5,
-    "atk": 1,
-    "acc": 80,
-    "def": 0,
     "element": "light",
     "race": "element",
     "personality": "cowardly",
@@ -42,16 +36,12 @@
     "fai": 1,
     "vit": 1,
     "agi": 10,
-    "luk": 5,
-    "floor_min": 0
+    "luk": 5
   },
   {
     "id": "goblin",
     "name": "ゴブリン",
     "hp": 3,
-    "atk": 2,
-    "acc": 90,
-    "def": 1,
     "element": "earth",
     "race": "gnome",
     "personality": "calculated",
@@ -65,16 +55,12 @@
     "fai": 1,
     "vit": 5,
     "agi": 2,
-    "luk": 2,
-    "floor_min": 0
+    "luk": 2
   },
   {
     "id": "orc",
     "name": "オーク",
     "hp": 6,
-    "atk": 3,
-    "acc": 95,
-    "def": 2,
     "element": "none",
     "race": "beast",
     "personality": "calculated",
@@ -88,16 +74,12 @@
     "fai": 1,
     "vit": 5,
     "agi": 2,
-    "luk": 1,
-    "floor_min": 1
+    "luk": 1
   },
   {
     "id": "red_dragon",
     "name": "レッドドラゴン",
     "hp": 15,
-    "atk": 5,
-    "acc": 100,
-    "def": 3,
     "element": "fire",
     "race": "dragon",
     "personality": "aggressive",
@@ -111,7 +93,6 @@
     "fai": 3,
     "vit": 10,
     "agi": 10,
-    "luk": 5,
-    "floor_min": 2
+    "luk": 5
   }
 ]

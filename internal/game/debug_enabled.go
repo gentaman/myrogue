@@ -91,7 +91,7 @@ func (g *GameScene) drawDebug(screen *ebiten.Image) {
 
 		// ID, 名前, Lv, HP, 性格, プレイヤーへの感情
 		rel := e.Relations[g.Player.ID]
-		eStr := fmt.Sprintf("%s%d:%s Lv%d HP%d %s", activeMarker, i, enemyDefs[e.kind].name, e.Level, e.HP, RaceNames[e.Race])
+		eStr := fmt.Sprintf("%s%d:%s Lv%d HP%d %s", activeMarker, i, enemyDefs[e.kind].Name, e.Level, e.HP, RaceNames[e.Race])
 		drawText(screen, eStr, fontFace12, x+padX+4, curY, color.White, false)
 		curY += rowH
 

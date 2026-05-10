@@ -107,7 +107,7 @@ func (g *GameScene) drawWorld(screen *ebiten.Image) {
 			continue
 		}
 		def := &enemyDefs[e.kind]
-		g.drawActor(screen, &e.Actor, nil, def.clr, camX, camY)
+		g.drawActor(screen, &e.Actor, nil, def.Color, camX, camY)
 		var dotClr color.RGBA
 		if e.state == EnemyAlerted {
 			if (g.frame/5)%2 == 0 {

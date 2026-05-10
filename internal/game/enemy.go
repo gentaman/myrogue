@@ -1,10 +1,6 @@
 package game
 
 import (
-	_ "embed"
-	"encoding/json"
-	"fmt"
-	"image/color"
 	"math/rand"
 )
 
@@ -39,168 +35,8 @@ const (
 	EnemyAlerted                   // プレイヤーを発見・追跡中
 )
 
-type Personality int
-
-const (
-	PersonalityAggressive Personality = iota // 常に追跡
-	PersonalityCowardly                      // 常に逃げる
-	PersonalityCalculated                    // レベル差を見て判断
-)
-
 // EnemyKind は敵の種別を表す
 type EnemyKind int
-
-type enemyDef struct {
-	name string
-	hp   int
-	// atk                          int
-	// acc                          int
-	// def                          int
-	element                      Element
-	race                         Race
-	personality                  Personality
-	neutralThreshold             int
-	friendlyThreshold            int
-	xp                           int
-	rarity                       int
-	clr                          color.RGBA
-	floorMin                     int
-	str, wis, fai, vit, agi, luk int
-}
-
-var (
-	//go:embed assets/enemies.json
-	enemiesJSON []byte
-
-	enemyDefs []enemyDef
-
-	enemyIDMap = map[string]EnemyKind{}
-)
-
-type rawEnemy struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	HP   int    `json:"hp"`
-	// ATK               int    `json:"atk"`
-	// ACC               int    `json:"acc"`
-	// DEF               int    `json:"def"`
-	Element           string `json:"element"`
-	Race              string `json:"race"`
-	Personality       string `json:"personality"`
-	NeutralThreshold  int    `json:"neutral_threshold"`
-	FriendlyThreshold int    `json:"friendly_threshold"`
-	XP                int    `json:"xp"`
-	Rarity            int    `json:"rarity"`
-	Color             string `json:"color"`
-	FloorMin          int    `json:"floor_min"`
-	Str               int    `json:"str"`
-	Wis               int    `json:"wis"`
-	Fai               int    `json:"fai"`
-	Vit               int    `json:"vit"`
-	Agi               int    `json:"agi"`
-	Luk               int    `json:"luk"`
-}
-
-func stringToElement(s string) Element {
-	switch s {
-	case "fire":
-		return ElementFire
-	case "water":
-		return ElementWater
-	case "air":
-		return ElementAir
-	case "earth":
-		return ElementEarth
-	case "light":
-		return ElementLight
-	case "dark":
-		return ElementDark
-	default:
-		return ElementNone
-	}
-}
-
-func stringToRace(s string) Race {
-	switch s {
-	case "human":
-		return RaceHuman
-	case "elf":
-		return RaceElf
-	case "dwarf":
-		return RaceDwarf
-	case "gnome":
-		return RaceGnome
-	case "halfling":
-		return RaceHalfling
-	case "element":
-		return RaceElement
-	case "beast":
-		return RaceBeast
-	case "dragon":
-		return RaceDragon
-	case "plant":
-		return RacePlant
-	case "undead":
-		return RaceUndead
-	case "insect":
-		return RaceInsect
-	case "bird":
-		return RaceBird
-	case "demon":
-		return RaceDemon
-	case "machine":
-		return RaceMachine
-	case "holy_beast":
-		return RaceHolyBeast
-	default:
-		return RaceHuman
-	}
-}
-
-func stringToPersonality(s string) Personality {
-	switch s {
-	case "cowardly":
-		return PersonalityCowardly
-	case "calculated":
-		return PersonalityCalculated
-	default:
-		return PersonalityAggressive
-	}
-}
-
-func init() {
-	var rawEnemies []rawEnemy
-	if err := json.Unmarshal(enemiesJSON, &rawEnemies); err != nil {
-		panic(fmt.Sprintf("failed to unmarshal enemies.json: %v", err))
-	}
-
-	enemyDefs = make([]enemyDef, len(rawEnemies))
-	for i, raw := range rawEnemies {
-		enemyIDMap[raw.ID] = EnemyKind(i)
-		enemyDefs[i] = enemyDef{
-			name: raw.Name,
-			hp:   raw.HP,
-			// atk:               raw.ATK,
-			// acc:               raw.ACC,
-			// def:               raw.DEF,
-			element:           stringToElement(raw.Element),
-			race:              stringToRace(raw.Race),
-			personality:       stringToPersonality(raw.Personality),
-			neutralThreshold:  raw.NeutralThreshold,
-			friendlyThreshold: raw.FriendlyThreshold,
-			xp:                raw.XP,
-			rarity:            raw.Rarity,
-			clr:               hexToRGBA(raw.Color),
-			floorMin:          raw.FloorMin,
-			str:               raw.Str,
-			wis:               raw.Wis,
-			fai:               raw.Fai,
-			vit:               raw.Vit,
-			agi:               raw.Agi,
-			luk:               raw.Luk,
-		}
-	}
-}
 
 // Enemy は敵キャラクターを表す
 type Enemy struct {
@@ -210,7 +46,7 @@ type Enemy struct {
 	rewardXP int
 }
 
-func (e *Enemy) GetName() string { return enemyDefs[e.kind].name }
+func (e *Enemy) GetName() string { return enemyDefs[e.kind].Name }
 
 func (e *Enemy) GetRelation(target Battler) RelationState {
 	def := &enemyDefs[e.kind]
@@ -219,10 +55,10 @@ func (e *Enemy) GetRelation(target Battler) RelationState {
 		return RelationFriendly
 	}
 	score := e.Relations[target.GetID()]
-	if score <= def.neutralThreshold {
+	if score <= def.NeutralThreshold {
 		return RelationHostile
 	}
-	if score >= def.friendlyThreshold {
+	if score >= def.FriendlyThreshold {
 		return RelationFriendly
 	}
 	// デフォルトは種族によって変えても良いが、一旦は敵対（または中立）
@@ -477,7 +313,7 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 		// 移動
 		var nx, ny int
 		action := "pursue"
-		switch def.personality {
+		switch def.Personality {
 		case PersonalityCowardly:
 			action = "flee"
 		case PersonalityCalculated:

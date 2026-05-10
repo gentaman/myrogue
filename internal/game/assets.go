@@ -29,6 +29,12 @@ var sfxCoinData []byte
 //go:embed assets/credits.txt
 var creditsText string
 
+//go:embed assets/enemies.json
+var enemiesJSON []byte
+
+//go:embed assets/player.json
+var playerJSON []byte
+
 var (
 	fontFaceSource *text.GoTextFaceSource
 	fontFace12     *text.GoTextFace
@@ -73,4 +79,6 @@ func init() {
 	sfxStairDownPCM = decodeSFX(sfxStairDownData)
 	sfxStairUpPCM = decodeSFX(sfxStairUpData)
 	sfxCoinPCM = decodeSFX(sfxCoinData)
+
+	initActorDefs()
 }
