@@ -186,13 +186,22 @@ func (g *GameScene) generateMap() {
 			g.worldMap[g.Player.X][g.Player.Y] = StairsUp
 		}
 	}
-	if g.floor == len(floorDefs)-1 && !g.hasTreasure {
+	if g.floor == len(floorDefs)-1 && !g.HasTreasure() {
 		for attempt := 0; attempt < 100; attempt++ {
 			roomIdx := rng.Intn(len(g.rooms))
 			r := g.rooms[roomIdx]
 			tx, ty := r.x+rng.Intn(r.w), r.y+rng.Intn(r.h)
 			if g.worldMap[tx][ty] == Floor && !g.nearSpecialTile(tx, ty) {
-				g.mapItems = append(g.mapItems, MapItem{x: tx, y: ty, kind: itemIDMap["treasure"]})
+				g.mapItems = append(g.mapItems, MapItem{
+					X: tx, Y: ty,
+					Inventory: []InventoryEntry{{
+						kind:          itemIDMap["treasure"],
+						count:         1,
+						Durability:    itemDefs[itemIDMap["treasure"]].durability,
+						obtainedSeed:  g.mapSeed,
+						obtainedFloor: g.floor,
+					}},
+				})
 				break
 			}
 		}
@@ -225,7 +234,16 @@ func (g *GameScene) generateMap() {
 			if poolIdx >= 0 {
 				itemID := fDef.ItemPool[poolIdx].ID
 				kind := itemIDMap[itemID]
-				g.mapItems = append(g.mapItems, MapItem{x: ix, y: iy, kind: kind, obtainedSeed: g.mapSeed, obtainedFloor: g.floor})
+				g.mapItems = append(g.mapItems, MapItem{
+					X: ix, Y: iy,
+					Inventory: []InventoryEntry{{
+						kind:          kind,
+						count:         1,
+						Durability:    itemDefs[kind].durability,
+						obtainedSeed:  g.mapSeed,
+						obtainedFloor: g.floor,
+					}},
+				})
 			}
 			break
 		}
@@ -333,9 +351,45 @@ func (g *GameScene) trySpawnEnemy(playerRoomIdx int) {
 		poolIdx := weightedChoice(rng, fDef.EnemyPool, weights)
 		kindIdx := enemyIDMap[fDef.EnemyPool[poolIdx].ID]
 		def := &enemyDefs[kindIdx]
+
+		enemyInv := []InventoryEntry{}
+		// 確率で木の武器や盾を持たせる
+		if rand.Intn(2) == 0 {
+			weaponKind := itemIDMap["weapon_wood"]
+			if g.floor > 0 && rand.Intn(2) == 0 {
+				weaponKind = itemIDMap["weapon_iron"]
+			}
+			enemyInv = append(enemyInv, InventoryEntry{
+				kind:       weaponKind,
+				count:      1,
+				Durability: itemDefs[weaponKind].durability,
+				Equipped:   true,
+			})
+		}
+
+		enemyID := time.Now().UnixNano() + int64(len(g.enemies))
 		g.enemies = append(g.enemies, Enemy{
-			Actor: Actor{X: ex, Y: ey, HP: def.hp, MaxHP: def.hp, Dir: DirDown},
-			kind:  kindIdx,
+			Actor: Actor{
+				ID:        enemyID,
+				X:         ex,
+				Y:         ey,
+				HP:        def.hp,
+				MaxHP:     def.hp,
+				Level:     1 + g.floor*2, // フロアに応じた初期レベル
+				XP:        0,
+				XPToNext:  10, // 固定または計算
+				Str:       def.atk,
+				Wis:       1,
+				Fai:       1,
+				Vit:       def.def,
+				Agi:       1,
+				Luk:       1,
+				Dir:       DirDown,
+				Race:      def.race,
+				Inventory: enemyInv,
+				Relations: make(map[int64]int),
+			},
+			kind: kindIdx,
 		})
 		return
 	}

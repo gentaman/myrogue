@@ -1,5 +1,15 @@
 [
   {
+    "id": "piece_of_paper",
+    "name": "紙切れ",
+    "desc": "価値のない紙切れ。軽く重さがない",
+    "effect_desc": "",
+    "weight": 0,
+    "rarity": 1,
+    "color": "#EAEAEA",
+    "durability": 1
+  },
+  {
     "id": "heal_small",
     "name": "回復薬（小）",
     "desc": "草を煎じた素朴な薬。飲むとHPが5回復する。軽くて持ち運びやすい。",
@@ -7,6 +17,7 @@
     "weight": 2,
     "rarity": 1,
     "color": "#64FF96",
+    "durability": 1,
     "effect": {
       "type": "heal",
       "amount": 5,
@@ -21,6 +32,7 @@
     "weight": 4,
     "rarity": 2,
     "color": "#32DC50",
+    "durability": 1,
     "effect": {
       "type": "heal",
       "amount": 10,
@@ -35,6 +47,7 @@
     "weight": 1,
     "rarity": 1,
     "color": "#FFDC50",
+    "durability": 1,
     "floor_bound": true,
     "can_use": {
       "type": "check_same_floor",
@@ -53,6 +66,7 @@
     "weight": 2,
     "rarity": 3,
     "color": "#64B4FF",
+    "durability": 1,
     "effect": {
       "type": "reveal_map",
       "message": "千里眼の薬を飲んだ！フロア%dの全体が明らかになった。"
@@ -66,6 +80,7 @@
     "weight": 3,
     "rarity": 1,
     "color": "#A0522D",
+    "durability": 10,
     "effect": {
       "type": "equip",
       "equip_type": "weapon",
@@ -80,6 +95,7 @@
     "weight": 5,
     "rarity": 3,
     "color": "#C0C0C0",
+    "durability": 50,
     "effect": {
       "type": "equip",
       "equip_type": "weapon",
@@ -94,6 +110,7 @@
     "weight": 3,
     "rarity": 1,
     "color": "#8B4513",
+    "durability": 10,
     "effect": {
       "type": "equip",
       "equip_type": "shield",
@@ -108,6 +125,7 @@
     "weight": 6,
     "rarity": 3,
     "color": "#A9A9A9",
+    "durability": 50,
     "effect": {
       "type": "equip",
       "equip_type": "shield",
@@ -122,6 +140,7 @@
     "weight": 4,
     "rarity": 2,
     "color": "#DEB887",
+    "durability": 15,
     "effect": {
       "type": "equip",
       "equip_type": "armor",
@@ -136,6 +155,7 @@
     "weight": 8,
     "rarity": 4,
     "color": "#708090",
+    "durability": 60,
     "effect": {
       "type": "equip",
       "equip_type": "armor",
@@ -150,6 +170,7 @@
     "weight": 3,
     "rarity": 3,
     "color": "#FF4500",
+    "durability": 20,
     "effect": {
       "type": "fireball",
       "cost": 3,
@@ -164,7 +185,8 @@
     "effect_desc": "持ち帰り用",
     "weight": 1,
     "rarity": 100,
-    "color": "#FFD700"
+    "color": "#FFD700",
+    "durability": -1
   },
   {
     "id": "thunder_staff",
@@ -173,7 +195,8 @@
     "effect_desc": "MP -4  遠距離攻撃",
     "weight": 4,
     "rarity": 4,
-    "color": "#00FFFF",
+    "color": "#FFF00A",
+    "durability": 20,
     "effect": {
       "type": "ranged_magic",
       "cost": 4,
@@ -182,5 +205,19 @@
       "message": "雷光が奔った！",
       "color": "#00FFFF"
     }
+  },
+  {
+    "id": "goddess_statue",
+    "name": "木彫りの女神",
+    "desc": "小さな女神の像。祈りを捧げると癒やしの光が溢れる。",
+    "effect_desc": "信仰心でHP回復",
+    "weight": 2,
+    "rarity": 2,
+    "color": "#FFD700",
+    "durability": 5,
+    "effect": {
+      "type": "heal_faith",
+      "message": "女神の光が体を包み、HPが回復した！"
+    }
   }
-  ]
+]

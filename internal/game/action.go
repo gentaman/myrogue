@@ -19,7 +19,7 @@ type actionItem struct {
 // 足元にアイテムがあるか判定
 func (g *GameScene) itemAtFeet() (int, bool) {
 	for i, it := range g.mapItems {
-		if it.x == g.Player.X && it.y == g.Player.Y {
+		if it.X == g.Player.X && it.Y == g.Player.Y {
 			return i, true
 		}
 	}
@@ -60,7 +60,7 @@ func (g *GameScene) buildMenu() {
 	// 調べる（拾う・階段）
 	label := "足元を調べる"
 	if _, found := g.itemAtFeet(); found {
-		label = "アイテムを拾う"
+		label = "足元の宝箱を開ける"
 	} else {
 		switch g.currentStairType() {
 		case Stairs, StairsUp:
@@ -79,7 +79,7 @@ func (g *GameScene) buildMenu() {
 	g.menuItems = append(g.menuItems, actionItem{
 		kind:    menuKindItem,
 		label:   "道具を使う",
-		enabled: len(g.inventory) > 0,
+		enabled: len(g.Player.Inventory) > 0,
 	})
 
 	// 待機
@@ -105,8 +105,9 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 		g.attackEnemy(ex, ey)
 	case menuKindExamine:
 		g.turnCount++
+		// 足元に MapItem (宝箱/アイテム) があれば ChestScene を開く
 		if idx, found := g.itemAtFeet(); found {
-			g.pickupItem(idx)
+			return &ChestScene{game: g, chestIdx: idx}, nil
 		} else if next, err := g.checkTile(); next != nil || err != nil {
 			return next, err
 		} else {

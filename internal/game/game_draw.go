@@ -74,20 +74,30 @@ func (g *GameScene) drawWorld(screen *ebiten.Image) {
 		}
 	}
 
-	// アイテム描画
+	// アイテム・宝箱描画
 	for _, it := range g.mapItems {
-		if !g.explored[it.x][it.y] {
+		if !g.explored[it.X][it.Y] {
 			continue
 		}
-		def := itemDefs[it.kind]
-		clr := def.clr
-		if !g.visible[it.x][it.y] {
+
+		var clr color.RGBA
+		if len(it.Inventory) > 1 {
+			// 複数あれば宝箱（金・茶）
+			clr = color.RGBA{180, 130, 40, 255}
+		} else if len(it.Inventory) == 1 {
+			// 1つならそのアイテムの色
+			clr = itemDefs[it.Inventory[0].kind].clr
+		} else {
+			continue
+		}
+
+		if !g.visible[it.X][it.Y] {
 			clr = color.RGBA{clr.R / 2, clr.G / 2, clr.B / 2, 255}
 		}
 		iRect := ebiten.NewImage(tileSize-16, tileSize-16)
 		iRect.Fill(clr)
 		iOp := &ebiten.DrawImageOptions{}
-		iOp.GeoM.Translate(float64(it.x*tileSize+8)-camX, float64(it.y*tileSize+8)-camY)
+		iOp.GeoM.Translate(float64(it.X*tileSize+8)-camX, float64(it.Y*tileSize+8)-camY)
 		screen.DrawImage(iRect, iOp)
 	}
 
@@ -171,10 +181,10 @@ func (g *GameScene) drawUI(screen *ebiten.Image, offsetY float64) {
 	}
 	wt := g.currentWeight()
 	drawText(screen, fmt.Sprintf("フロア: %d  ターン: %d", g.floor+1, g.turnCount), fontFace12, 8, int(statusY), color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("Lv: %d  XP: %d / %d", g.Level, g.XP, g.XPToNext), fontFace12, 160, int(statusY), color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("HP: %d / %d  MP: %d / %d", g.Player.HP, g.Player.MaxHP, g.MP, g.MaxMP), fontFace12, 8, int(statusY+16), hpClr, false)
-	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d", 1+g.Str+g.equippedAtk(), g.equippedDef()+g.Vit, wt, maxCarryWeight), fontFace12, 160, int(statusY+16), color.RGBA{200, 200, 200, 255}, false)
-	drawText(screen, fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", g.Str, g.Wis, g.Fai, g.Vit, g.Agi, g.Luk), fontFace12, 8, int(statusY+32), color.RGBA{150, 150, 150, 255}, false)
+	drawText(screen, fmt.Sprintf("Lv: %d  XP: %d / %d", g.Player.Level, g.Player.XP, g.Player.XPToNext), fontFace12, 160, int(statusY), color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("HP: %d / %d  MP: %d / %d", g.Player.HP, g.Player.MaxHP, g.Player.MP, g.Player.MaxMP), fontFace12, 8, int(statusY+16), hpClr, false)
+	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d", 1+g.Player.Str+g.equippedAtk(), g.equippedDef()+g.Player.Vit, wt, maxCarryWeight), fontFace12, 160, int(statusY+16), color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk), fontFace12, 8, int(statusY+32), color.RGBA{150, 150, 150, 255}, false)
 	drawText(screen, g.message, fontFace14, 8, int(statusY+48), color.RGBA{255, 255, 255, 255}, false)
 	drawText(screen, "H: ヘルプ", fontFace12, screenWidth-80, int(statusY), color.RGBA{100, 100, 100, 255}, false)
 }

@@ -28,7 +28,7 @@ type InventoryScene struct {
 var subMenuLabels = []string{"使う", "捨てる", "説明を見る", "キャンセル"}
 
 func (s *InventoryScene) clampCursor() {
-	n := len(s.game.inventory)
+	n := len(s.game.Player.Inventory)
 	if n == 0 {
 		s.cursor = 0
 		return
@@ -65,7 +65,7 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 	if hintW+padRight > panelW {
 		panelW = hintW + padRight
 	}
-	for _, entry := range s.game.inventory {
+	for _, entry := range s.game.Player.Inventory {
 		def := &itemDefs[entry.kind]
 		label := fmt.Sprintf("%s  x%d  (重%d)", def.entryName(entry), entry.count, def.weight)
 		w := measureText(label, fontFace14) + padX + padRight
@@ -76,7 +76,7 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 	if panelW > maxW {
 		panelW = maxW
 	}
-	n := len(s.game.inventory)
+	n := len(s.game.Player.Inventory)
 	if n == 0 {
 		n = 1
 	}
@@ -93,7 +93,7 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 }
 
 func (s *InventoryScene) Update() (Scene, error) {
-	inv := s.game.inventory
+	inv := s.game.Player.Inventory
 	if s.subMenu == invSubDesc {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 			s.subMenu = invSubNone
@@ -169,7 +169,7 @@ func (s *InventoryScene) Draw(screen *ebiten.Image) {
 	panelY := (screenHeight - panelH) / 2
 	drawPanel(screen, panelX, panelY, panelW, panelH, color.RGBA{15, 20, 40, 255}, color.RGBA{80, 180, 100, 255})
 	drawText(screen, "アイテム", fontFace14, screenWidth/2, panelY+12, color.RGBA{150, 255, 150, 255}, true)
-	inv := s.game.inventory
+	inv := s.game.Player.Inventory
 	if len(inv) == 0 {
 		drawText(screen, "アイテムを持っていない", fontFace14, screenWidth/2, panelY+panelH/2-10, color.RGBA{120, 120, 120, 255}, true)
 	} else {
@@ -266,10 +266,10 @@ func (s *InventoryScene) drawSubMenu(screen *ebiten.Image, panelX, panelY, panel
 }
 
 func (s *InventoryScene) drawDescWindow(screen *ebiten.Image, panelX, panelY, panelW, panelH int) {
-	if s.cursor < 0 || s.cursor >= len(s.game.inventory) {
+	if s.cursor < 0 || s.cursor >= len(s.game.Player.Inventory) {
 		return
 	}
-	entry := s.game.inventory[s.cursor]
+	entry := s.game.Player.Inventory[s.cursor]
 	def := itemDefs[entry.kind]
 	const (
 		dPad  = 16

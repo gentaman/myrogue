@@ -39,18 +39,32 @@ const (
 	EnemyAlerted                   // プレイヤーを発見・追跡中
 )
 
+type Personality int
+
+const (
+	PersonalityAggressive Personality = iota // 常に追跡
+	PersonalityCowardly                      // 常に逃げる
+	PersonalityCalculated                    // レベル差を見て判断
+)
+
 // EnemyKind は敵の種別を表す
 type EnemyKind int
 
 type enemyDef struct {
-	name     string
-	hp       int
-	atk      int
-	acc      int
-	xp       int
-	rarity   int
-	clr      color.RGBA
-	floorMin int
+	name              string
+	hp                int
+	atk               int
+	acc               int
+	def               int
+	element           Element
+	race              Race
+	personality       Personality
+	neutralThreshold  int
+	friendlyThreshold int
+	xp                int
+	rarity            int
+	clr               color.RGBA
+	floorMin          int
 }
 
 var (
@@ -63,15 +77,88 @@ var (
 )
 
 type rawEnemy struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	HP       int    `json:"hp"`
-	ATK      int    `json:"atk"`
-	ACC      int    `json:"acc"`
-	XP       int    `json:"xp"`
-	Rarity   int    `json:"rarity"`
-	Color    string `json:"color"`
-	FloorMin int    `json:"floor_min"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	HP                int    `json:"hp"`
+	ATK               int    `json:"atk"`
+	ACC               int    `json:"acc"`
+	DEF               int    `json:"def"`
+	Element           string `json:"element"`
+	Race              string `json:"race"`
+	Personality       string `json:"personality"`
+	NeutralThreshold  int    `json:"neutral_threshold"`
+	FriendlyThreshold int    `json:"friendly_threshold"`
+	XP                int    `json:"xp"`
+	Rarity            int    `json:"rarity"`
+	Color             string `json:"color"`
+	FloorMin          int    `json:"floor_min"`
+}
+
+func stringToElement(s string) Element {
+	switch s {
+	case "fire":
+		return ElementFire
+	case "water":
+		return ElementWater
+	case "air":
+		return ElementAir
+	case "earth":
+		return ElementEarth
+	case "light":
+		return ElementLight
+	case "dark":
+		return ElementDark
+	default:
+		return ElementNone
+	}
+}
+
+func stringToRace(s string) Race {
+	switch s {
+	case "human":
+		return RaceHuman
+	case "elf":
+		return RaceElf
+	case "dwarf":
+		return RaceDwarf
+	case "gnome":
+		return RaceGnome
+	case "halfling":
+		return RaceHalfling
+	case "element":
+		return RaceElement
+	case "beast":
+		return RaceBeast
+	case "dragon":
+		return RaceDragon
+	case "plant":
+		return RacePlant
+	case "undead":
+		return RaceUndead
+	case "insect":
+		return RaceInsect
+	case "bird":
+		return RaceBird
+	case "demon":
+		return RaceDemon
+	case "machine":
+		return RaceMachine
+	case "holy_beast":
+		return RaceHolyBeast
+	default:
+		return RaceHuman
+	}
+}
+
+func stringToPersonality(s string) Personality {
+	switch s {
+	case "cowardly":
+		return PersonalityCowardly
+	case "calculated":
+		return PersonalityCalculated
+	default:
+		return PersonalityAggressive
+	}
 }
 
 func init() {
@@ -84,14 +171,20 @@ func init() {
 	for i, raw := range rawEnemies {
 		enemyIDMap[raw.ID] = EnemyKind(i)
 		enemyDefs[i] = enemyDef{
-			name:     raw.Name,
-			hp:       raw.HP,
-			atk:      raw.ATK,
-			acc:      raw.ACC,
-			xp:       raw.XP,
-			rarity:   raw.Rarity,
-			clr:      hexToRGBA(raw.Color),
-			floorMin: raw.FloorMin,
+			name:              raw.Name,
+			hp:                raw.HP,
+			atk:               raw.ATK,
+			acc:               raw.ACC,
+			def:               raw.DEF,
+			element:           stringToElement(raw.Element),
+			race:              stringToRace(raw.Race),
+			personality:       stringToPersonality(raw.Personality),
+			neutralThreshold:  raw.NeutralThreshold,
+			friendlyThreshold: raw.FriendlyThreshold,
+			xp:                raw.XP,
+			rarity:            raw.Rarity,
+			clr:               hexToRGBA(raw.Color),
+			floorMin:          raw.FloorMin,
 		}
 	}
 }
@@ -103,6 +196,46 @@ type Enemy struct {
 	kind  EnemyKind
 }
 
+func (e *Enemy) GetName() string { return enemyDefs[e.kind].name }
+
+func (e *Enemy) GetRelation(target Battler) RelationState {
+	def := &enemyDefs[e.kind]
+	// 同じ種族なら常に友好
+	if e.Race == target.GetRace() {
+		return RelationFriendly
+	}
+	score := e.Relations[target.GetID()]
+	if score <= def.neutralThreshold {
+		return RelationHostile
+	}
+	if score >= def.friendlyThreshold {
+		return RelationFriendly
+	}
+	// デフォルトは種族によって変えても良いが、一旦は敵対（または中立）
+	// ローグライクの敵なので、プレイヤーや他種族にはデフォルト敵対 (-100) で初期化することにする
+	return RelationHostile
+}
+
+func (e *Enemy) ConsumeDurability(g *GameScene, et EquipType) {
+	if et == EquipNone {
+		return
+	}
+	for i := 0; i < len(e.Inventory); i++ {
+		entry := &e.Inventory[i]
+		if entry.Equipped && itemDefs[entry.kind].equipType == et {
+			def := &itemDefs[entry.kind]
+			if def.durability < 0 {
+				return
+			}
+			entry.Durability--
+			if entry.Durability <= 0 {
+				e.Inventory = append(e.Inventory[:i], e.Inventory[i+1:]...)
+			}
+			return
+		}
+	}
+}
+
 func (g *GameScene) isEnemyAt(x, y int) bool {
 	for _, e := range g.enemies {
 		if e.X == x && e.Y == y {
@@ -112,29 +245,30 @@ func (g *GameScene) isEnemyAt(x, y int) bool {
 	return false
 }
 
-// プレイヤーが敵を攻撃
+// 特定のマスにいるユニット(敵 or プレイヤー)を返す
+func (g *GameScene) unitAt(x, y int) Battler {
+	if g.Player.X == x && g.Player.Y == y {
+		return g
+	}
+	for i := range g.enemies {
+		if g.enemies[i].X == x && g.enemies[i].Y == y {
+			return &g.enemies[i]
+		}
+	}
+	return nil
+}
+
 func (g *GameScene) attackEnemy(x, y int) {
-	damage := 1 + g.Str + g.equippedAtk()
 	for i := range g.enemies {
 		e := &g.enemies[i]
 		if e.X == x && e.Y == y {
-			def := &enemyDefs[e.kind]
-			e.HP -= damage
-			e.DamageAnim = damageAnimFrames
-			if e.HP <= 0 {
-				g.pushMessage(fmt.Sprintf("%sを倒した！", def.name))
-				g.gainXP(def.xp)
-				g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
-			} else {
-				g.pushMessage(fmt.Sprintf("%sに %d のダメージを与えた！", def.name, damage))
-			}
+			g.Combat.AttackEnemy(g, i)
 			playSFXHit()
 			return
 		}
 	}
 }
 
-// 向き (dx,dy) を Dir に変換するヘルパー
 func dirFromDelta(dx, dy int) Dir {
 	switch {
 	case dx > 0:
@@ -148,15 +282,14 @@ func dirFromDelta(dx, dy int) Dir {
 	}
 }
 
-// 敵がプレイヤーを視認できるか判定する
-func (g *GameScene) canSeePlayer(e *Enemy) bool {
+func (g *GameScene) canSeeUnit(e *Enemy, targetX, targetY int) bool {
 	er := g.roomOf(e.X, e.Y)
-	pr := g.roomOf(g.Player.X, g.Player.Y)
-	if er != -1 && er == pr {
+	tr := g.roomOf(targetX, targetY)
+	if er != -1 && er == tr {
 		return true
 	}
-	if e.X == g.Player.X {
-		minY, maxY := e.Y, g.Player.Y
+	if e.X == targetX {
+		minY, maxY := e.Y, targetY
 		if minY > maxY {
 			minY, maxY = maxY, minY
 		}
@@ -167,8 +300,8 @@ func (g *GameScene) canSeePlayer(e *Enemy) bool {
 		}
 		return true
 	}
-	if e.Y == g.Player.Y {
-		minX, maxX := e.X, g.Player.X
+	if e.Y == targetY {
+		minX, maxX := e.X, targetX
 		if minX > maxX {
 			minX, maxX = maxX, minX
 		}
@@ -182,7 +315,6 @@ func (g *GameScene) canSeePlayer(e *Enemy) bool {
 	return false
 }
 
-// BFS で (startX,startY) から (goalX,goalY) への次の1マスを返す
 func (g *GameScene) bfsNextStep(startX, startY, goalX, goalY int) (int, int) {
 	if startX == goalX && startY == goalY {
 		return startX, startY
@@ -224,7 +356,25 @@ func (g *GameScene) bfsNextStep(startX, startY, goalX, goalY int) (int, int) {
 	return cur.x, cur.y
 }
 
-// 個別の敵の行動を処理
+func (g *GameScene) bfsFleeStep(startX, startY, fearX, fearY int) (int, int) {
+	type pos struct{ x, y int }
+	dirs := [4]pos{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+	bestX, bestY := startX, startY
+	maxDist := float64((startX-fearX)*(startX-fearX) + (startY-fearY)*(startY-fearY))
+	for _, d := range dirs {
+		nx, ny := startX+d.x, startY+d.y
+		if nx < 0 || nx >= mapWidth || ny < 0 || ny >= mapHeight || g.worldMap[nx][ny] == Wall || g.isEnemyAt(nx, ny) {
+			continue
+		}
+		dist := float64((nx-fearX)*(nx-fearX) + (ny-fearY)*(ny-fearY))
+		if dist > maxDist {
+			maxDist = dist
+			bestX, bestY = nx, ny
+		}
+	}
+	return bestX, bestY
+}
+
 func (g *GameScene) moveSingleEnemy(idx int) {
 	if idx >= len(g.enemies) {
 		return
@@ -232,50 +382,103 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 	e := &g.enemies[idx]
 	def := &enemyDefs[e.kind]
 
-	// 正面にプレイヤーがいるなら攻撃
-	fdx, fdy := e.Dir.delta()
-	if e.X+fdx == g.Player.X && e.Y+fdy == g.Player.Y {
-		e.AttackAnim = attackAnimFrames
-		if g.tryDodge(def.acc) {
-			g.pushMessage(fmt.Sprintf("%sの攻撃をかわした！", def.name))
-		} else {
-			damage := def.atk - (g.equippedDef() + g.Vit)
-			if damage < 0 {
-				damage = 0
+	// 視界内の敵対ユニットを探す（プレイヤー含む）
+	var target Battler
+	if g.canSeeUnit(e, g.Player.X, g.Player.Y) {
+		if e.GetRelation(g) == RelationHostile {
+			target = g
+		}
+	}
+	if target == nil {
+		for i := range g.enemies {
+			if i == idx {
+				continue
 			}
-			g.Player.HP -= damage
-			g.Player.DamageAnim = damageAnimFrames
-			playSFXHit()
-			if g.Player.HP <= 0 {
-				g.Player.HP = 0
-				g.playState = StateDead
-				g.pushMessage("力尽きた...")
-				return
-			}
-			if damage > 0 {
-				g.pushMessage(fmt.Sprintf("%sに攻撃された！ %d のダメージ！ HP: %d", def.name, damage, g.Player.HP))
-			} else {
-				g.pushMessage(fmt.Sprintf("%sの攻撃を弾き返した！", def.name))
+			en := &g.enemies[i]
+			if g.canSeeUnit(e, en.X, en.Y) && e.GetRelation(en) == RelationHostile {
+				target = en
+				break
 			}
 		}
-		return
 	}
 
-	// 視界チェック
-	if g.canSeePlayer(e) {
+	if target != nil {
 		e.state = EnemyAlerted
+		// 攻撃範囲チェック (隣接)
+		tx, ty := 0, 0
+		if target.GetID() == g.Player.ID {
+			tx, ty = g.Player.X, g.Player.Y
+		} else {
+			for _, en := range g.enemies {
+				if en.ID == target.GetID() {
+					tx, ty = en.X, en.Y
+					break
+				}
+			}
+		}
+
+		dx := tx - e.X
+		dy := ty - e.Y
+		if abs(dx)+abs(dy) == 1 {
+			e.Dir = dirFromDelta(dx, dy)
+			e.AttackAnim = attackAnimFrames
+			if target.GetID() == g.Player.ID {
+				g.Combat.AttackPlayer(g, idx)
+			} else {
+				// ユニット間戦闘
+				var targetIdx int = -1
+				for i := range g.enemies {
+					if g.enemies[i].ID == target.GetID() {
+						targetIdx = i
+						break
+					}
+				}
+				if targetIdx >= 0 {
+					g.Combat.ExecuteAttack(g, e, &g.enemies[targetIdx])
+					if g.enemies[targetIdx].HP <= 0 {
+						g.actorGainXP(&e.Actor, enemyDefs[g.enemies[targetIdx].kind].xp)
+						g.dropChest(g.enemies[targetIdx].X, g.enemies[targetIdx].Y, g.enemies[targetIdx].Inventory)
+						// 自分が消える可能性もあるが、ここでは target を消す
+						if targetIdx < idx {
+							idx--
+						}
+						g.enemies = append(g.enemies[:targetIdx], g.enemies[targetIdx+1:]...)
+					}
+				}
+			}
+			return
+		}
+
+		// 移動
+		var nx, ny int
+		action := "pursue"
+		switch def.personality {
+		case PersonalityCowardly:
+			action = "flee"
+		case PersonalityCalculated:
+			if g.Player.Level > 1+g.floor*2 {
+				action = "flee"
+			}
+		}
+
+		if action == "flee" {
+			nx, ny = g.bfsFleeStep(e.X, e.Y, tx, ty)
+		} else {
+			nx, ny = g.bfsNextStep(e.X, e.Y, tx, ty)
+		}
+
+		if nx != e.X || ny != e.Y {
+			e.Dir = dirFromDelta(nx-e.X, ny-e.Y)
+			if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) {
+				e.X, e.Y = nx, ny
+			}
+		}
 	} else {
 		e.state = EnemyIdle
-	}
-
-	var nx, ny int
-	if e.state == EnemyAlerted {
-		nx, ny = g.bfsNextStep(e.X, e.Y, g.Player.X, g.Player.Y)
-	} else {
 		dirList := [4][2]int{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 		candidates := dirList
 		rand.Shuffle(len(candidates), func(a, b int) { candidates[a], candidates[b] = candidates[b], candidates[a] })
-		nx, ny = e.X, e.Y
+		nx, ny := e.X, e.Y
 		for _, d := range candidates {
 			cx, cy := e.X+d[0], e.Y+d[1]
 			if cx >= 0 && cx < mapWidth && cy >= 0 && cy < mapHeight && g.worldMap[cx][cy] != Wall {
@@ -283,12 +486,11 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 				break
 			}
 		}
-	}
-
-	if nx != e.X || ny != e.Y {
-		e.Dir = dirFromDelta(nx-e.X, ny-e.Y)
-		if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) {
-			e.X, e.Y = nx, ny
+		if nx != e.X || ny != e.Y {
+			e.Dir = dirFromDelta(nx-e.X, ny-e.Y)
+			if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) {
+				e.X, e.Y = nx, ny
+			}
 		}
 	}
 }

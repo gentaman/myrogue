@@ -10,11 +10,12 @@
       { "id": "golden_slime", "weight": 10 }
     ],
     "item_pool": [
-      { "id": "heal_small", "weight": 60 },
+      { "id": "piece_of_paper", "weight": 50 },
+      { "id": "heal_small", "weight": 50 },
       { "id": "weapon_wood", "weight": 20 },
       { "id": "reveal_map", "weight": 15 },
       { "id": "fireball", "weight": 15 },
-      { "id": "thunder_staff", "weight": 1000 },
+      { "id": "thunder_staff", "weight": 20 },
       { "id": "goddess_statue", "weight": 15 },
       { "id": "shield_wood", "weight": 20 }
     ]
