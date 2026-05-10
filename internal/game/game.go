@@ -174,10 +174,10 @@ func (a *UserPlayer) GetName() string {
 	return a.Name
 }
 
-func NewUserPlayer(name string, race Race, level int, str, wis, fai, vit, agi, luk int) *UserPlayer {
+func NewUserPlayer(name string, race Race, level int, str, wis, fai, vit, agi, luk int, element Element, baseHP, baseMP int) *UserPlayer {
 	nextXP := int(10 * math.Pow(float64(level), 1.5))
-	hp := playerMaxHP + vit*2
-	mp := 5 + wis*5
+	hp := baseHP + vit*2
+	mp := baseMP + wis*5
 	return &UserPlayer{
 		Actor: Actor{
 			ID:        1,
@@ -186,7 +186,7 @@ func NewUserPlayer(name string, race Race, level int, str, wis, fai, vit, agi, l
 			MP:        mp,
 			MaxMP:     mp,
 			Dir:       DirDown,
-			Element:   ElementNone,
+			Element:   element,
 			Race:      race,
 			Level:     level,
 			XP:        0,
@@ -210,6 +210,7 @@ type Projectile struct {
 	Frame          int
 	TotalFrames    int
 	Color          color.RGBA
+	IsFlash        bool // trueの場合、EndX, EndY の位置でタイルサイズの点滅エフェクトを表示
 }
 
 // GameScene はゲームプレイ画面を表す
@@ -257,6 +258,7 @@ func (g *GameScene) GetUnitAt(x, y int) Battler             { return g.unitAt(x,
 func (g *GameScene) GetPlayState() PlayState                { return g.playState }
 func (g *GameScene) SetPlayState(s PlayState)               { g.playState = s }
 func (g *GameScene) AddProjectile(p Projectile)             { g.projectiles = append(g.projectiles, p) }
+func (g *GameScene) GetCombat() *CombatManager              { return g.Combat }
 
 func (g *GameScene) HasTreasure() bool {
 	hasTreasure := false
@@ -296,13 +298,17 @@ func (g *GameScene) RemoveEnemy(ID int64) {
 	for idx, e := range g.enemies {
 		if e.ID == ID {
 			g.enemies = append(g.enemies[:idx], g.enemies[idx+1:]...)
+			if idx <= g.activeEnemyIdx {
+				g.activeEnemyIdx--
+			}
+			break
 		}
 	}
-
 }
 
 func NewGameScene() *GameScene {
-	p := NewUserPlayer("あなた", RaceHuman, 1, 1, 1, 1, 1, 1, 1)
+	def := playerDefs[0]
+	p := NewUserPlayer("あなた", RaceHuman, 1, def.Str, def.Wis, def.Fai, def.Vit, def.Agi, def.Luk, def.Element, def.HP, def.MP)
 	return newGameSceneWithState(p, 0, 0, false, nil)
 }
 

@@ -219,5 +219,24 @@
       "type": "heal_faith",
       "message": "女神の光が体を包み、HPが回復した！"
     }
+  },
+  {
+    "id": "scroll_holy_light",
+    "name": "聖なる光の巻物",
+    "desc": "周囲を浄化の光で包み込む巻物。自分の周囲2マスの敵を攻撃する。",
+    "effect_desc": "周囲2マスに光属性ダメージ",
+    "weight": 2,
+    "rarity": 4,
+    "color": "#FFFFA0",
+    "durability": 1,
+    "effect": {
+      "type": "area_magic",
+      "damage": 10,
+      "cost": 0,
+      "range": 2,
+      "element": "light",
+      "message": "聖なる光が溢れ出した！",
+      "color": "#FFFFE0"
+    }
   }
 ]

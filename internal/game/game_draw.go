@@ -128,6 +128,21 @@ func (g *GameScene) drawWorld(screen *ebiten.Image) {
 
 	// 遠隔攻撃
 	for _, p := range g.projectiles {
+		if p.IsFlash {
+			// 点滅エフェクト
+			alpha := uint8(200)
+			if (p.Frame/4)%2 == 0 {
+				alpha = 100
+			}
+			fRect := ebiten.NewImage(tileSize, tileSize)
+			c := p.Color
+			c.A = alpha
+			fRect.Fill(c)
+			fOp := &ebiten.DrawImageOptions{}
+			fOp.GeoM.Translate(p.EndX-camX, p.EndY-camY)
+			screen.DrawImage(fRect, fOp)
+			continue
+		}
 		t := float64(p.Frame) / float64(p.TotalFrames)
 		curX := p.StartX + (p.EndX-p.StartX)*t
 		curY := p.StartY + (p.EndY-p.StartY)*t

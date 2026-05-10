@@ -61,7 +61,6 @@ var (
 	enemyIDMap  = map[string]int{}
 
 	// ショートカット用
-	playerMaxHP    int
 	maxCarryWeight int
 )
 
@@ -106,7 +105,6 @@ func initActorDefs() {
 	enemyDefs, enemyIDMap = loadActorDefs(enemiesJSON)
 
 	if len(playerDefs) > 0 {
-		playerMaxHP = playerDefs[0].HP
 		maxCarryWeight = playerDefs[0].MaxCarryWeight
 	}
 }

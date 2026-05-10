@@ -102,15 +102,17 @@ func tryAttack(attacker, defender Battler) bool {
 	return rand.Intn(100) < int(attackChance*100)
 }
 
-func (cm *CombatManager) ResolveCombat(bus *EventBus, attacker, defender Battler) {
-	cType := attacker.GetCombatType()
-
+func (cm *CombatManager) ResolveCombat(bus *EventBus, attacker, defender Battler, cType CombatType, bonusAtk int, element Element) {
 	if tryAttack(attacker, defender) {
-		cm.ExecuteAttack(bus, cType, attacker, defender)
+		cm.ExecuteAttack(bus, cType, attacker, defender, bonusAtk, element)
 	} else {
 		bus.Publish(MsgLog{Text: fmt.Sprintf("%sは%sの攻撃をかわした！", defender.GetName(), attacker.GetName())})
 	}
 
+	cm.HandlePostCombat(bus, attacker, defender)
+}
+
+func (cm *CombatManager) HandlePostCombat(bus *EventBus, attacker, defender Battler) {
 	toXPatk := -1
 	toXPdef := -1
 	if defender.GetCurrentHP() <= 0 {
@@ -128,7 +130,6 @@ func (cm *CombatManager) ResolveCombat(bus *EventBus, attacker, defender Battler
 	if toXPdef >= 0 {
 		defender.GainXP(bus, toXPdef)
 	}
-
 }
 
 func OnDeath(bus *EventBus, battler Battler) {
@@ -197,12 +198,12 @@ func GetEffectiveness(attacker, defender Element) float64 {
 	return 1.0 // 通常ダメージ
 }
 
-func (cm *CombatManager) ExecuteAttack(bus *EventBus, cType CombatType, attacker Battler, defender Battler) int {
+func (cm *CombatManager) ExecuteAttack(bus *EventBus, cType CombatType, attacker Battler, defender Battler, bonusAtk int, element Element) int {
 	atkStats := attacker.GetStats()
 	defStats := defender.GetStats()
 
 	// 1. ダメージ計算 (属性相性も適用)
-	multiplier := GetEffectiveness(atkStats.Element, defStats.Element)
+	multiplier := GetEffectiveness(element, defStats.Element)
 
 	attack := 0
 	defence := 0
@@ -210,12 +211,12 @@ func (cm *CombatManager) ExecuteAttack(bus *EventBus, cType CombatType, attacker
 	switch cType {
 	case CombatTypePhysical:
 		{
-			attack += atkStats.PhysicalAttack
+			attack += atkStats.PhysicalAttack + bonusAtk
 			defence += defStats.PhysicalDefense
 		}
 	case CombatTypeMagical:
 		{
-			attack += atkStats.MagicalAttack
+			attack += atkStats.MagicalAttack + bonusAtk
 			defence += defStats.MagicalDefense
 		}
 	}
@@ -231,7 +232,9 @@ func (cm *CombatManager) ExecuteAttack(bus *EventBus, cType CombatType, attacker
 	defender.UpdateRelation(attacker.GetID(), min(-damage, -1))
 
 	// 3. 耐久度消費
-	attacker.ConsumeDurability(bus, EquipWeapon)
+	if cType == CombatTypePhysical {
+		attacker.ConsumeDurability(bus, EquipWeapon)
+	}
 	defender.ConsumeDurability(bus, EquipShield)
 	defender.ConsumeDurability(bus, EquipArmor)
 

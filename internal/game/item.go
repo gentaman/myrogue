@@ -30,6 +30,7 @@ type WorldState interface {
 	AddProjectile(p Projectile)
 	GetPlayState() PlayState
 	SetPlayState(s PlayState)
+	GetCombat() *CombatManager
 }
 
 type ItemEffect func(bus *EventBus, state WorldState, actor *Actor, entryIdx int)
@@ -97,6 +98,7 @@ type parameterizedEffectSpec struct {
 	Damage    int    `json:"damage"`
 	Range     int    `json:"range"`
 	Color     string `json:"color"`
+	Element   string `json:"element"`
 }
 
 type parameterizedConditionSpec struct {
@@ -118,24 +120,7 @@ type rawItem struct {
 	Effect     *parameterizedEffectSpec    `json:"effect"`
 }
 
-type playerCfg struct {
-	MaxHP          int `json:"hp"`
-	MaxCarryWeight int `json:"max_carry_weight"`
-}
-
 func init() {
-	var playerCfgs []playerCfg
-
-	if err := json.Unmarshal(playerJSON, &playerCfgs); err != nil {
-		panic(fmt.Sprintf("failed to unmarshal player.json: %v", err))
-	}
-	if len(playerCfgs) < 1 {
-		panic(fmt.Sprintf("player.json is empty"))
-	}
-
-	playerMaxHP = playerCfgs[0].MaxHP
-	maxCarryWeight = playerCfgs[0].MaxCarryWeight
-
 	var rawItems []rawItem
 	if err := json.Unmarshal(itemsJSON, &rawItems); err != nil {
 		panic(fmt.Sprintf("failed to unmarshal items.json: %v", err))
@@ -182,6 +167,22 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 		spec = &parameterizedEffectSpec{Type: "nop"}
 	}
 
+	el := ElementNone
+	switch spec.Element {
+	case "fire":
+		el = ElementFire
+	case "water":
+		el = ElementWater
+	case "air":
+		el = ElementAir
+	case "earth":
+		el = ElementEarth
+	case "light":
+		el = ElementLight
+	case "dark":
+		el = ElementDark
+	}
+
 	switch spec.Type {
 	case "heal":
 		return func(bus *EventBus, state WorldState, actor *Actor, _ int) {
@@ -226,24 +227,14 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 			}
 			dx, dy := actor.Dir.delta()
 			nx, ny := actor.X+dx, actor.Y+dy
-			hit := false
 			target := state.GetUnitAt(nx, ny)
 			if target != nil {
 				actor.MP -= spec.Cost
 				if actor.ID == 1 {
 					bus.Publish(MsgLog{Text: spec.Message})
 				}
-				target.ApplyDamage(spec.Damage)
-				target.UpdateRelation(actor.GetID(), -spec.Damage*10)
-
-				// ユニットが死亡したかチェック
-				if target.GetCurrentHP() <= 0 {
-					bus.Publish(MsgDeath{Battler: target})
-					bus.Publish(MsgXP{Actor: actor, Amount: target.GetRewardXP()})
-				}
-				hit = true
-			}
-			if !hit && actor.ID == 1 {
+				state.GetCombat().ResolveCombat(bus, actor, target, CombatTypeMagical, spec.Damage, el)
+			} else if actor.ID == 1 {
 				bus.Publish(MsgLog{Text: "何もない方向に炎を放った。"})
 			}
 		}
@@ -284,11 +275,51 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 				bus.Publish(MsgLog{Text: spec.Message})
 			}
 			if targetUnit != nil {
-				targetUnit.ApplyDamage(spec.Damage)
-				targetUnit.UpdateRelation(actor.GetID(), -spec.Damage*10)
-				if targetUnit.GetCurrentHP() <= 0 {
-					bus.Publish(MsgDeath{Battler: targetUnit})
-					bus.Publish(MsgXP{Actor: actor, Amount: targetUnit.GetRewardXP()})
+				state.GetCombat().ResolveCombat(bus, actor, targetUnit, CombatTypeMagical, spec.Damage, el)
+			}
+		}
+	case "area_magic":
+		return func(bus *EventBus, state WorldState, actor *Actor, idx int) {
+			if actor.MP < spec.Cost {
+				if actor.ID == 1 {
+					bus.Publish(MsgLog{Text: "MPが足りない！"})
+				}
+				return
+			}
+			actor.MP -= spec.Cost
+			if actor.ID == 1 {
+				bus.Publish(MsgLog{Text: spec.Message})
+			}
+
+			r := spec.Range
+			if r <= 0 {
+				r = 1
+			}
+
+			for dy := -r; dy <= r; dy++ {
+				for dx := -r; dx <= r; dx++ {
+					if abs(dx)+abs(dy) > r || (dx == 0 && dy == 0) {
+						continue
+					}
+					tx, ty := actor.X+dx, actor.Y+dy
+					if tx < 0 || tx >= mapWidth || ty < 0 || ty >= mapHeight {
+						continue
+					}
+
+					// 点滅アニメーション
+					state.AddProjectile(Projectile{
+						EndX:        float64(tx * tileSize),
+						EndY:        float64(ty * tileSize),
+						Frame:       0,
+						TotalFrames: 15,
+						Color:       hexToRGBA(spec.Color),
+						IsFlash:     true,
+					})
+
+					target := state.GetUnitAt(tx, ty)
+					if target != nil {
+						state.GetCombat().ResolveCombat(bus, actor, target, CombatTypeMagical, spec.Damage, el)
+					}
 				}
 			}
 		}

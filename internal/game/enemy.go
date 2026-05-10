@@ -118,7 +118,7 @@ func (g *GameScene) attackEnemy(x, y int) {
 		e := &g.enemies[i]
 		if e.X == x && e.Y == y {
 			// g.Combat.AttackEnemy(g, i)
-			g.Combat.ResolveCombat(g.Bus, g.Player, e)
+			g.Combat.ResolveCombat(g.Bus, g.Player, e, g.Player.GetCombatType(), 0, g.Player.GetStats().Element)
 			g.Bus.Publish(MsgSFX{PCM: sfxHitPCM})
 			return
 		}
@@ -279,7 +279,7 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 			e.Dir = dirFromDelta(dx, dy)
 			e.AttackAnim = attackAnimFrames
 			if target.GetID() == g.Player.ID {
-				g.Combat.ResolveCombat(g.Bus, e, g.Player)
+				g.Combat.ResolveCombat(g.Bus, e, g.Player, e.GetCombatType(), 0, e.GetStats().Element)
 			} else {
 				// ユニット間戦闘
 				var targetIdx int = -1
@@ -290,21 +290,7 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 					}
 				}
 				if targetIdx >= 0 {
-					g.Combat.ResolveCombat(g.Bus, e, &g.enemies[targetIdx])
-					if g.enemies[targetIdx].HP <= 0 {
-						// 経験値獲得もイベント経由にする（既に ResolveCombat 内で処理されているはずだが、
-						// ユニット間戦闘の特殊ロジックがここにある場合は注意が必要）
-						// ResolveCombat は既に死亡判定と経験値獲得を行っている。
-
-						// 自分が消える可能性もあるが、ここでは target を消す
-						if targetIdx < idx {
-							idx--
-						}
-						// 注意: ResolveCombat の中の OnDeath(bus, defender) が MsgDeath を発行し、
-						// GameScene のハンドラが RemoveEnemy を呼ぶため、二重削除を避ける必要がある。
-						// 現状の GameScene.OnDeath ハンドラが RemoveEnemy を呼ぶ実装になっているなら、
-						// ここでの append は不要になる可能性がある。
-					}
+					g.Combat.ResolveCombat(g.Bus, e, &g.enemies[targetIdx], e.GetCombatType(), 0, e.GetStats().Element)
 				}
 			}
 			return

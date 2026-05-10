@@ -17,6 +17,7 @@
       { "id": "fireball", "weight": 15 },
       { "id": "thunder_staff", "weight": 20 },
       { "id": "goddess_statue", "weight": 15 },
+      { "id": "scroll_holy_light", "weight": 15 },
       { "id": "shield_wood", "weight": 20 }
     ]
   },
@@ -39,6 +40,7 @@
       { "id": "fireball", "weight": 15 },
       { "id": "thunder_staff", "weight": 15 },
       { "id": "goddess_statue", "weight": 15 },
+      { "id": "scroll_holy_light", "weight": 50 },
       { "id": "armor_wood", "weight": 20 }
     ]
   },
