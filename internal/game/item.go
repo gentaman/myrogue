@@ -19,7 +19,20 @@ const (
 	ItemClairvoyant
 )
 
-type ItemEffect func(g *GameScene, actor *Actor, entryIdx int)
+type WorldState interface {
+	GetMap() *[mapWidth][mapHeight]TileType
+	IsExplored(x, y int) bool
+	SetExplored(x, y int, v bool)
+	GetFloor() int
+	GetSeed() int64
+	GetUnitAt(x, y int) Battler
+	RemoveEnemy(id int64)
+	AddProjectile(p Projectile)
+	GetPlayState() PlayState
+	SetPlayState(s PlayState)
+}
+
+type ItemEffect func(bus *EventBus, state WorldState, actor *Actor, entryIdx int)
 
 type EquipType int
 
@@ -39,12 +52,14 @@ type itemDef struct {
 	clr        color.RGBA
 	durability int
 	floorBound bool
-	canUse     func(g *GameScene, entry InventoryEntry) (bool, string)
+	canUse     func(bus *EventBus, state WorldState, entry InventoryEntry) (bool, string)
 	effect     ItemEffect
 
 	equipType EquipType
-	atk       int
-	def       int
+	phyatk    int
+	phydef    int
+	magatk    int
+	magdef    int
 }
 
 func (d *itemDef) entryName(entry InventoryEntry) string {
@@ -154,8 +169,8 @@ func init() {
 			canUse:     buildCondition(raw.CanUse),
 			effect:     buildEffect(raw.Effect),
 			equipType:  et,
-			atk:        atk,
-			def:        def,
+			phyatk:     atk,
+			phydef:     def,
 		}
 	}
 }
@@ -167,86 +182,74 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 
 	switch spec.Type {
 	case "heal":
-		return func(g *GameScene, actor *Actor, _ int) {
+		return func(bus *EventBus, state WorldState, actor *Actor, _ int) {
 			actor.HP += spec.Amount
 			if actor.HP > actor.MaxHP {
 				actor.HP = actor.MaxHP
 			}
-			g.pushMessage(spec.Message)
+			bus.Publish(MsgLog{Text: spec.Message})
 		}
 	case "heal_faith":
-		return func(g *GameScene, actor *Actor, _ int) {
+		return func(bus *EventBus, state WorldState, actor *Actor, _ int) {
 			heal := 5 + actor.Fai*2
 			actor.HP += heal
 			if actor.HP > actor.MaxHP {
 				actor.HP = actor.MaxHP
 			}
-			g.pushMessage(spec.Message)
+			bus.Publish(MsgLog{Text: spec.Message})
 		}
 	case "reveal_map":
-		return func(g *GameScene, _ *Actor, _ int) {
+		return func(bus *EventBus, state WorldState, _ *Actor, _ int) {
+			m := state.GetMap()
 			for x := 0; x < mapWidth; x++ {
 				for y := 0; y < mapHeight; y++ {
-					if g.worldMap[x][y] != Wall {
-						g.explored[x][y] = true
+					if (*m)[x][y] != Wall {
+						state.SetExplored(x, y, true)
 					}
 				}
 			}
 			if strings.Contains(spec.Message, "%d") {
-				g.pushMessage(fmt.Sprintf(spec.Message, g.floor+1))
+				bus.Publish(MsgLog{Text: fmt.Sprintf(spec.Message, state.GetFloor()+1)})
 			} else {
-				g.pushMessage(spec.Message)
+				bus.Publish(MsgLog{Text: spec.Message})
 			}
 		}
 	case "fireball":
-		return func(g *GameScene, actor *Actor, idx int) {
+		return func(bus *EventBus, state WorldState, actor *Actor, idx int) {
 			if actor.MP < spec.Cost {
-				if actor.ID == g.Player.ID {
-					g.pushMessage("MPが足りない！")
+				if actor.ID == 1 { // プレイヤーID
+					bus.Publish(MsgLog{Text: "MPが足りない！"})
 				}
 				return
 			}
 			dx, dy := actor.Dir.delta()
 			nx, ny := actor.X+dx, actor.Y+dy
 			hit := false
-			target := g.unitAt(nx, ny)
+			target := state.GetUnitAt(nx, ny)
 			if target != nil {
 				actor.MP -= spec.Cost
-				if actor.ID == g.Player.ID {
-					g.pushMessage(spec.Message)
+				if actor.ID == 1 {
+					bus.Publish(MsgLog{Text: spec.Message})
 				}
 				target.ApplyDamage(spec.Damage)
 				target.UpdateRelation(actor.GetID(), -spec.Damage*10)
 
 				// ユニットが死亡したかチェック
-				if target.GetID() == g.Player.ID {
-					if g.Player.HP <= 0 {
-						g.playState = StateDead
-						g.pushMessage("あなたは力尽きた...")
-					}
-				} else {
-					for i := range g.enemies {
-						e := &g.enemies[i]
-						if e.ID == target.GetID() && e.HP <= 0 {
-							g.pushMessage(fmt.Sprintf("%sを倒した！", e.GetName()))
-							g.actorGainXP(actor, enemyDefs[e.kind].xp)
-							g.dropChest(e.X, e.Y, e.Inventory)
-							g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
-							break
-						}
-					}
+				if target.GetCurrentHP() <= 0 {
+					bus.Publish(MsgDeath{Battler: target})
+					bus.Publish(MsgXP{Actor: actor, Amount: target.GetRewardXP()})
 				}
 				hit = true
 			}
-			if !hit && actor.ID == g.Player.ID {
-				g.pushMessage("何もない方向に炎を放った。")
+			if !hit && actor.ID == 1 {
+				bus.Publish(MsgLog{Text: "何もない方向に炎を放った。"})
 			}
 		}
 	case "ranged_magic":
-		return func(g *GameScene, actor *Actor, idx int) {
+		return func(bus *EventBus, state WorldState, actor *Actor, idx int) {
 			if actor.MP < spec.Cost {
-				if actor.ID == g.Player.ID {
-					g.pushMessage("MPが足りない！")
+				if actor.ID == 1 {
+					bus.Publish(MsgLog{Text: "MPが足りない！"})
 				}
 				return
 			}
@@ -254,18 +257,19 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 			dx, dy := actor.Dir.delta()
 			targetX, targetY := actor.X, actor.Y
 			var targetUnit Battler
+			m := state.GetMap()
 			for r := 1; r <= spec.Range; r++ {
 				tx, ty := actor.X+dx*r, actor.Y+dy*r
-				if tx < 0 || tx >= mapWidth || ty < 0 || ty >= mapHeight || g.worldMap[tx][ty] == Wall {
+				if tx < 0 || tx >= mapWidth || ty < 0 || ty >= mapHeight || (*m)[tx][ty] == Wall {
 					break
 				}
 				targetX, targetY = tx, ty
-				targetUnit = g.unitAt(tx, ty)
+				targetUnit = state.GetUnitAt(tx, ty)
 				if targetUnit != nil {
 					break
 				}
 			}
-			g.projectiles = append(g.projectiles, Projectile{
+			state.AddProjectile(Projectile{
 				StartX:      float64(actor.X*tileSize + tileSize/2),
 				StartY:      float64(actor.Y*tileSize + tileSize/2),
 				EndX:        float64(targetX*tileSize + tileSize/2),
@@ -274,40 +278,27 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 				TotalFrames: 15,
 				Color:       hexToRGBA(spec.Color),
 			})
-			if actor.ID == g.Player.ID {
-				g.pushMessage(spec.Message)
+			if actor.ID == 1 {
+				bus.Publish(MsgLog{Text: spec.Message})
 			}
 			if targetUnit != nil {
 				targetUnit.ApplyDamage(spec.Damage)
 				targetUnit.UpdateRelation(actor.GetID(), -spec.Damage*10)
-				if targetUnit.GetID() == g.Player.ID {
-					if g.Player.HP <= 0 {
-						g.playState = StateDead
-						g.pushMessage("あなたは力尽きた...")
-					}
-				} else {
-					for i := range g.enemies {
-						e := &g.enemies[i]
-						if e.ID == targetUnit.GetID() && e.HP <= 0 {
-							g.pushMessage(fmt.Sprintf("%sを倒した！", e.GetName()))
-							g.actorGainXP(actor, enemyDefs[e.kind].xp)
-							g.dropChest(e.X, e.Y, e.Inventory)
-							g.enemies = append(g.enemies[:i], g.enemies[i+1:]...)
-							break
-						}
-					}
+				if targetUnit.GetCurrentHP() <= 0 {
+					bus.Publish(MsgDeath{Battler: targetUnit})
+					bus.Publish(MsgXP{Actor: actor, Amount: targetUnit.GetRewardXP()})
 				}
 			}
 		}
 	case "equip":
-		return func(g *GameScene, actor *Actor, idx int) {
+		return func(bus *EventBus, state WorldState, actor *Actor, idx int) {
 			entry := &actor.Inventory[idx]
 			def := &itemDefs[entry.kind]
 
 			if entry.Equipped {
 				entry.Equipped = false
-				if actor.ID == g.Player.ID {
-					g.pushMessage(def.name + "を外した。")
+				if actor.ID == 1 {
+					bus.Publish(MsgLog{Text: def.name + "を外した。"})
 				}
 				return
 			}
@@ -319,29 +310,29 @@ func buildEffect(spec *parameterizedEffectSpec) ItemEffect {
 				}
 			}
 			entry.Equipped = true
-			if actor.ID == g.Player.ID {
-				g.pushMessage(def.name + "を装備した。")
+			if actor.ID == 1 {
+				bus.Publish(MsgLog{Text: def.name + "を装備した。"})
 			}
 		}
 	default:
-		return func(g *GameScene, actor *Actor, idx int) {
+		return func(bus *EventBus, state WorldState, actor *Actor, idx int) {
 			entry := &actor.Inventory[idx]
 			def := &itemDefs[entry.kind]
-			if actor.ID == g.Player.ID {
-				g.pushMessage(def.name + "を使ったが、何もおきなかった。")
+			if actor.ID == 1 {
+				bus.Publish(MsgLog{Text: def.name + "を使ったが、何もおきなかった。"})
 			}
 		}
 	}
 }
 
-func buildCondition(spec *parameterizedConditionSpec) func(*GameScene, InventoryEntry) (bool, string) {
+func buildCondition(spec *parameterizedConditionSpec) func(*EventBus, WorldState, InventoryEntry) (bool, string) {
 	if spec == nil {
 		return nil
 	}
 	switch spec.Type {
 	case "check_same_floor":
-		return func(g *GameScene, entry InventoryEntry) (bool, string) {
-			if entry.obtainedSeed != g.mapSeed {
+		return func(bus *EventBus, state WorldState, entry InventoryEntry) (bool, string) {
+			if entry.obtainedSeed != state.GetSeed() {
 				return false, fmt.Sprintf(spec.Message, entry.obtainedFloor+1)
 			}
 			return true, ""
@@ -386,21 +377,41 @@ func (a *Actor) currentWeight() int {
 	return total
 }
 
-func (a *Actor) equippedAtk() int {
+func (a *Actor) equippedPhyAtk() int {
 	atk := 0
 	for _, e := range a.Inventory {
 		if e.Equipped {
-			atk += itemDefs[e.kind].atk
+			atk += itemDefs[e.kind].phyatk
 		}
 	}
 	return atk
 }
 
-func (a *Actor) equippedDef() int {
+func (a *Actor) equippedMagAtk() int {
+	atk := 0
+	for _, e := range a.Inventory {
+		if e.Equipped {
+			atk += itemDefs[e.kind].magatk
+		}
+	}
+	return atk
+}
+
+func (a *Actor) equippedPhyDef() int {
 	def := 0
 	for _, e := range a.Inventory {
 		if e.Equipped {
-			def += itemDefs[e.kind].def
+			def += itemDefs[e.kind].phydef
+		}
+	}
+	return def
+}
+
+func (a *Actor) equippedMagDef() int {
+	def := 0
+	for _, e := range a.Inventory {
+		if e.Equipped {
+			def += itemDefs[e.kind].magdef
 		}
 	}
 	return def
@@ -410,12 +421,12 @@ func (g *GameScene) currentWeight() int {
 	return g.Player.currentWeight()
 }
 
-func (g *GameScene) equippedAtk() int {
-	return g.Player.equippedAtk()
+func (g *GameScene) equippedPhyAtk() int {
+	return g.Player.equippedPhyAtk()
 }
 
-func (g *GameScene) equippedDef() int {
-	return g.Player.equippedDef()
+func (g *GameScene) equippedPhyDef() int {
+	return g.Player.equippedPhyDef()
 }
 
 func (g *GameScene) addInventory(actor *Actor, k ItemKind, durability int, obtainedSeed int64, obtainedFloor int) bool {
@@ -459,13 +470,13 @@ func (g *GameScene) useInventoryItem(idx int) bool {
 	entry := &g.Player.Inventory[idx]
 	def := &itemDefs[entry.kind]
 	if def.canUse != nil {
-		if ok, msg := def.canUse(g, *entry); !ok {
-			g.pushMessage(msg)
+		if ok, msg := def.canUse(g.Bus, g, *entry); !ok {
+			g.Bus.Publish(MsgLog{Text: msg})
 			return false
 		}
 	}
 	if def.effect != nil {
-		def.effect(g, &g.Player, idx)
+		def.effect(g.Bus, g, &(g.Player.Actor), idx)
 	}
 
 	// 装備品の使用（着脱）では耐久度を減らさない（攻撃/防御時に減らす）
@@ -477,7 +488,7 @@ func (g *GameScene) useInventoryItem(idx int) bool {
 	if entry.Durability > 0 {
 		entry.Durability--
 		if entry.Durability <= 0 {
-			g.pushMessage(def.name + "は壊れた。")
+			g.Bus.Publish(MsgLog{Text: def.name + "は壊れた。"})
 			g.Player.Inventory = append(g.Player.Inventory[:idx], g.Player.Inventory[idx+1:]...)
 		}
 	}

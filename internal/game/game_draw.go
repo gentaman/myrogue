@@ -123,7 +123,7 @@ func (g *GameScene) drawWorld(screen *ebiten.Image) {
 	}
 
 	// プレイヤー描画
-	g.drawActor(screen, &g.Player, playerImage, color.White, camX, camY)
+	g.drawActor(screen, &(g.Player.Actor), playerImage, color.White, camX, camY)
 	drawDirDot(screen, g.Player.X, g.Player.Y, g.Player.Dir, color.RGBA{255, 255, 255, 255}, camX, camY)
 
 	// 遠隔攻撃
@@ -183,7 +183,7 @@ func (g *GameScene) drawUI(screen *ebiten.Image, offsetY float64) {
 	drawText(screen, fmt.Sprintf("フロア: %d  ターン: %d", g.floor+1, g.turnCount), fontFace12, 8, int(statusY), color.RGBA{200, 200, 200, 255}, false)
 	drawText(screen, fmt.Sprintf("Lv: %d  XP: %d / %d", g.Player.Level, g.Player.XP, g.Player.XPToNext), fontFace12, 160, int(statusY), color.RGBA{200, 200, 200, 255}, false)
 	drawText(screen, fmt.Sprintf("HP: %d / %d  MP: %d / %d", g.Player.HP, g.Player.MaxHP, g.Player.MP, g.Player.MaxMP), fontFace12, 8, int(statusY+16), hpClr, false)
-	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d", 1+g.Player.Str+g.equippedAtk(), g.equippedDef()+g.Player.Vit, wt, maxCarryWeight), fontFace12, 160, int(statusY+16), color.RGBA{200, 200, 200, 255}, false)
+	drawText(screen, fmt.Sprintf("ATK: %d  DEF: %d 重量: %d / %d", 1+g.Player.Str+g.equippedPhyAtk(), g.equippedPhyDef()+g.Player.Vit, wt, maxCarryWeight), fontFace12, 160, int(statusY+16), color.RGBA{200, 200, 200, 255}, false)
 	drawText(screen, fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk), fontFace12, 8, int(statusY+32), color.RGBA{150, 150, 150, 255}, false)
 	drawText(screen, g.message, fontFace14, 8, int(statusY+48), color.RGBA{255, 255, 255, 255}, false)
 	drawText(screen, "H: ヘルプ", fontFace12, screenWidth-80, int(statusY), color.RGBA{100, 100, 100, 255}, false)

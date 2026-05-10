@@ -69,14 +69,31 @@ type Actor struct {
 	Relations                    map[int64]int // ID -> 感情値
 }
 
+const (
+	MaxStr = 100
+	MaxWis = 100
+	MaxFai = 100
+	MaxVit = 100
+	MaxAgi = 100
+	MaxLuk = 100
+)
+
 func (a *Actor) GetID() int64 { return a.ID }
 func (a *Actor) GetStats() Stats {
 	return Stats{
-		Attack:  1 + a.Str + a.equippedAtk(),
-		Defense: a.equippedDef() + a.Vit,
-		Element: a.Element,
+		PhysicalAttack:  a.Str + a.equippedPhyAtk(),
+		PhysicalDefense: a.Vit + a.equippedPhyDef(),
+		MagicalAttack:   a.Wis + a.equippedMagAtk(),
+		MagicalDefense:  a.Fai + a.equippedMagDef(),
+		BaseAccuracy:    100,
+		Element:         a.Element,
 	}
 }
+
+func (a *Actor) GetCombatType() CombatType {
+	return CombatTypePhysical
+}
+
 func (a *Actor) GetName() string {
 	return "???"
 }
@@ -91,6 +108,70 @@ func (a *Actor) UpdateRelation(targetID int64, delta int) {
 		a.Relations = make(map[int64]int)
 	}
 	a.Relations[targetID] += delta
+}
+
+func (a *Actor) GetRelation(target Battler) RelationState {
+	if a.Race == target.GetRace() {
+		return RelationFriendly
+	}
+	score := a.Relations[target.GetID()]
+	if score <= -20 {
+		return RelationHostile
+	}
+	if score >= 50 {
+		return RelationFriendly
+	}
+	return RelationNeutral
+}
+
+func (a *Actor) ConsumeDurability(bus *EventBus, et EquipType) {
+	if et == EquipNone {
+		return
+	}
+	for i := 0; i < len(a.Inventory); i++ {
+		entry := a.Inventory[i]
+		if entry.Equipped && itemDefs[entry.kind].equipType == et {
+			def := &itemDefs[entry.kind]
+			if def.durability < 0 {
+				return // 壊れない
+			}
+			entry.Durability--
+			if entry.Durability <= 0 {
+				bus.Publish(MsgLog{Text: def.name + "は壊れてしまった！"})
+				a.Inventory = append(a.Inventory[:i], a.Inventory[i+1:]...)
+			}
+			return
+		}
+	}
+}
+
+func (a *Actor) GetCurrentHP() int {
+	return a.HP
+}
+
+func (a *Actor) GetCurrentMP() int {
+	return a.MP
+}
+
+func (a *Actor) GetRewardXP() int {
+	return 0
+}
+
+func (a *Actor) OnDeath(bus *EventBus) {
+	bus.Publish(MsgDropChest{X: a.X, Y: a.Y, Inventory: a.Inventory})
+}
+
+func (a *Actor) GainXP(bus *EventBus, amount int) {
+	bus.Publish(MsgXP{Actor: a, Amount: amount})
+}
+
+type UserPlayer struct {
+	Actor
+	Name string
+}
+
+func (a *UserPlayer) GetName() string {
+	return a.Name
 }
 
 // Projectile は遠隔攻撃のアニメーション体
@@ -108,7 +189,7 @@ type GameScene struct {
 	explored       [mapWidth][mapHeight]bool // 一度でも視界に入ったタイル（静的要素を表示）
 	visible        [mapWidth][mapHeight]bool // 現在視界に入っているタイル（動的要素も表示）
 	mapSeed        int64                     // このフロアのマップ生成シード
-	Player         Actor
+	Player         *UserPlayer
 	playState      PlayState
 	turnState      TurnState
 	message        string
@@ -121,6 +202,7 @@ type GameScene struct {
 	maxEnemies     int
 	floor          int
 	Combat         *CombatManager
+	Bus            *EventBus
 
 	menuOpen   bool
 	menuCursor int
@@ -133,7 +215,19 @@ type GameScene struct {
 	animAccumulator float64 // 速度調整用蓄積
 
 	confirmQuit bool // タイトルへ戻る確認ダイアログ表示中
+
+	nextScene Scene // メッセージで要求された次のシーン
 }
+
+func (g *GameScene) GetMap() *[mapWidth][mapHeight]TileType { return &g.worldMap }
+func (g *GameScene) IsExplored(x, y int) bool               { return g.explored[x][y] }
+func (g *GameScene) SetExplored(x, y int, v bool)           { g.explored[x][y] = v }
+func (g *GameScene) GetFloor() int                          { return g.floor }
+func (g *GameScene) GetSeed() int64                         { return g.mapSeed }
+func (g *GameScene) GetUnitAt(x, y int) Battler             { return g.unitAt(x, y) }
+func (g *GameScene) GetPlayState() PlayState                { return g.playState }
+func (g *GameScene) SetPlayState(s PlayState)               { g.playState = s }
+func (g *GameScene) AddProjectile(p Projectile)             { g.projectiles = append(g.projectiles, p) }
 
 func (g *GameScene) HasTreasure() bool {
 	hasTreasure := false
@@ -144,66 +238,6 @@ func (g *GameScene) HasTreasure() bool {
 		}
 	}
 	return hasTreasure
-}
-
-func (g *GameScene) GetID() int64 { return g.Player.ID }
-func (g *GameScene) GetStats() Stats {
-	return g.Player.GetStats()
-}
-
-func (g *GameScene) ApplyDamage(dmg int) {
-	g.Player.ApplyDamage(dmg)
-}
-
-func (g *GameScene) GetName() string {
-	return "あなた"
-}
-
-func (g *GameScene) GetRace() Race {
-	return g.Player.Race
-}
-
-func (g *GameScene) GetLevel() int {
-	return g.Player.Level
-}
-
-func (g *GameScene) UpdateRelation(targetID int64, delta int) {
-	g.Player.UpdateRelation(targetID, delta)
-}
-
-func (g *GameScene) GetRelation(target Battler) RelationState {
-	if g.Player.Race == target.GetRace() {
-		return RelationFriendly
-	}
-	score := g.Player.Relations[target.GetID()]
-	if score <= -20 {
-		return RelationHostile
-	}
-	if score >= 50 {
-		return RelationFriendly
-	}
-	return RelationNeutral
-}
-
-func (g *GameScene) ConsumeDurability(gs *GameScene, et EquipType) {
-	if et == EquipNone {
-		return
-	}
-	for i := 0; i < len(g.Player.Inventory); i++ {
-		entry := &g.Player.Inventory[i]
-		if entry.Equipped && itemDefs[entry.kind].equipType == et {
-			def := &itemDefs[entry.kind]
-			if def.durability < 0 {
-				return // 壊れない
-			}
-			entry.Durability--
-			if entry.Durability <= 0 {
-				g.pushMessage(def.name + "は壊れてしまった！")
-				g.Player.Inventory = append(g.Player.Inventory[:i], g.Player.Inventory[i+1:]...)
-			}
-			return
-		}
-	}
 }
 
 func (g *GameScene) dropChest(x, y int, inventory []InventoryEntry) {
@@ -228,13 +262,23 @@ func (g *GameScene) dropChest(x, y int, inventory []InventoryEntry) {
 	g.pushMessage("宝箱がドロップされた！")
 }
 
+// IDをもとに敵を削除する
+func (g *GameScene) RemoveEnemy(ID int64) {
+	for idx, e := range g.enemies {
+		if e.ID == ID {
+			g.enemies = append(g.enemies[:idx], g.enemies[idx+1:]...)
+		}
+	}
+
+}
+
 func NewGameScene() *GameScene {
 	return newGameSceneWithState(20, 0, 0, false, nil, nil, 1, 0, 10, 1, 1, 1, 1, 1, 1, RaceHuman)
 }
 
 func newGameSceneWithState(hp, turnCount, floor int, fromBelow bool, inventory []InventoryEntry, log []string, level, xp, nextXP, str, wis, fai, vit, agi, luk int, race Race) *GameScene {
-	g := &GameScene{
-		Player: Actor{
+	player := UserPlayer{
+		Actor: Actor{
 			ID:        1, // プレイヤーは固定ID 1
 			HP:        hp,
 			MaxHP:     playerMaxHP + vit*2,
@@ -253,12 +297,55 @@ func newGameSceneWithState(hp, turnCount, floor int, fromBelow bool, inventory [
 			Luk:       luk,
 			Relations: make(map[int64]int),
 		},
+		Name: "あなた",
+	}
+	g := &GameScene{
+		Player:     &player,
 		turnCount:  turnCount,
 		floor:      floor,
 		messageLog: log,
 		Combat:     &CombatManager{},
 		AnimSpeed:  1.0,
 	}
+	g.Bus = NewEventBus()
+	g.Bus.OnLog(func(msg string) {
+		g.message = msg
+		g.messageLog = append(g.messageLog, msg)
+		if len(g.messageLog) > 1000 {
+			g.messageLog = g.messageLog[len(g.messageLog)-1000:]
+		}
+	})
+	g.Bus.OnSFX(func(pcm []byte) {
+		playSFX(pcm)
+	})
+	g.Bus.OnDamage(func(msg MsgDamage) {
+		// 必要に応じて演出などを追加
+	})
+	g.Bus.OnDeath(func(msg MsgDeath) {
+		if msg.Battler.GetID() == g.Player.ID {
+			g.playState = StateDead
+			g.pushMessage("あなたは力尽きた...")
+		} else {
+			g.RemoveEnemy(msg.Battler.GetID())
+			g.pushMessage(fmt.Sprintf("%sは死亡した", msg.Battler.GetName()))
+		}
+	})
+	g.Bus.OnXP(func(msg MsgXP) {
+		g.actorGainXP(msg.Actor, msg.Amount)
+	})
+	g.Bus.OnChest(func(msg MsgDropChest) {
+		g.dropChest(msg.X, msg.Y, msg.Inventory)
+	})
+	g.Bus.OnChangeFloor(func(msg MsgChangeFloor) {
+		if msg.Direction > 0 {
+			g.nextScene = newGameSceneWithState(g.Player.HP, g.turnCount, msg.CurrentFloor+1, false, g.Player.Inventory, g.messageLog, g.Player.Level, g.Player.XP, g.Player.XPToNext, g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk, g.Player.Race)
+		} else {
+			g.nextScene = newGameSceneWithState(g.Player.HP, g.turnCount, msg.CurrentFloor-1, true, g.Player.Inventory, g.messageLog, g.Player.Level, g.Player.XP, g.Player.XPToNext, g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk, g.Player.Race)
+		}
+	})
+	g.Bus.OnTransition(func(msg MsgTransition) {
+		g.nextScene = msg.Next
+	})
 	g.Player.MaxMP = 5 + g.Player.Wis*5
 	g.Player.MP = 5 + g.Player.Wis*5
 
@@ -304,18 +391,24 @@ func (g *GameScene) rollStatsUp(a *Actor, rng *rand.Rand) {
 		switch stat {
 		case 0:
 			a.Str++
+			a.Str = min(a.Str, MaxStr)
 		case 1:
 			a.Wis++
+			a.Wis = min(a.Wis, MaxWis)
 		case 2:
 			a.Fai++
+			a.Fai = min(a.Fai, MaxFai)
 		case 3:
 			a.Vit++
+			a.Vit = min(a.Vit, MaxVit)
 			a.HP += 2
 			a.MaxHP += 2
 		case 4:
 			a.Agi++
+			a.Agi = min(a.Agi, MaxAgi)
 		case 5:
 			a.Luk++
+			a.Luk = min(a.Luk, MaxLuk)
 		}
 	}
 }
@@ -329,11 +422,7 @@ func (g *GameScene) tryDodge(acc int) bool {
 }
 
 func (g *GameScene) pushMessage(msg string) {
-	g.message = msg
-	g.messageLog = append(g.messageLog, msg)
-	if len(g.messageLog) > 1000 {
-		g.messageLog = g.messageLog[len(g.messageLog)-1000:]
-	}
+	g.Bus.Publish(MsgLog{Text: msg})
 }
 
 func (g *GameScene) cameraOffset() (float64, float64) {
@@ -431,6 +520,9 @@ func (g *GameScene) Update() (Scene, error) {
 		return g.updatePlayerTurn()
 	case TurnEnemyAct:
 		g.updateEnemyTurns()
+	}
+	if g.nextScene != nil {
+		return g.nextScene, nil
 	}
 	return nil, nil
 }
@@ -572,20 +664,19 @@ func (g *GameScene) checkTile() (Scene, error) {
 	tile := g.worldMap[g.Player.X][g.Player.Y]
 	switch tile {
 	case Stairs:
-
 		if g.HasTreasure() {
 			g.playState = StateWin
 			g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d（ターン: %d / HP: %d）", g.calcScore(), g.turnCount, g.Player.HP))
-			playSFX(sfxStairUpPCM)
+			g.Bus.Publish(MsgSFX{PCM: sfxStairUpPCM})
 		} else {
 			g.pushMessage("宝がない！まだ帰れない。")
 		}
 	case StairsUp:
-		playSFX(sfxStairUpPCM)
-		return newGameSceneWithState(g.Player.HP, g.turnCount, g.floor-1, true, g.Player.Inventory, g.messageLog, g.Player.Level, g.Player.XP, g.Player.XPToNext, g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk, g.Player.Race), nil
+		g.Bus.Publish(MsgSFX{PCM: sfxStairUpPCM})
+		g.Bus.Publish(MsgChangeFloor{CurrentFloor: g.floor, Direction: -1})
 	case StairsDown:
-		playSFX(sfxStairDownPCM)
-		return newGameSceneWithState(g.Player.HP, g.turnCount, g.floor+1, false, g.Player.Inventory, g.messageLog, g.Player.Level, g.Player.XP, g.Player.XPToNext, g.Player.Str, g.Player.Wis, g.Player.Fai, g.Player.Vit, g.Player.Agi, g.Player.Luk, g.Player.Race), nil
+		g.Bus.Publish(MsgSFX{PCM: sfxStairDownPCM})
+		g.Bus.Publish(MsgChangeFloor{CurrentFloor: g.floor, Direction: 1})
 	}
 	return nil, nil
 }

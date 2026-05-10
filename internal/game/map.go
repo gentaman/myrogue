@@ -378,18 +378,19 @@ func (g *GameScene) trySpawnEnemy(playerRoomIdx int) {
 				Level:     1 + g.floor*2, // フロアに応じた初期レベル
 				XP:        0,
 				XPToNext:  10, // 固定または計算
-				Str:       def.atk,
-				Wis:       1,
-				Fai:       1,
-				Vit:       def.def,
-				Agi:       1,
-				Luk:       1,
+				Str:       def.str,
+				Wis:       def.wis,
+				Fai:       def.fai,
+				Vit:       def.vit,
+				Agi:       def.agi,
+				Luk:       def.luk,
 				Dir:       DirDown,
 				Race:      def.race,
 				Inventory: enemyInv,
 				Relations: make(map[int64]int),
 			},
-			kind: kindIdx,
+			kind:     kindIdx,
+			rewardXP: def.xp,
 		})
 		return
 	}

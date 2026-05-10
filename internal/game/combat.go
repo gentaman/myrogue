@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"math/rand"
 )
 
 type Element int
@@ -62,6 +63,14 @@ var OrderedRaces = []Race{
 
 type RelationState int
 
+type CombatType int
+
+const (
+	CombatTypePhysical CombatType = iota
+	CombatTypeMagical
+	CombatTypeKarma
+)
+
 const (
 	RelationHostile RelationState = iota
 	RelationNeutral
@@ -71,59 +80,89 @@ const (
 type CombatManager struct {
 }
 
-func (cm *CombatManager) AttackEnemy(g *GameScene, enemyIdx int) {
-	if enemyIdx < 0 || enemyIdx >= len(g.enemies) {
-		return
-	}
-	enemy := &g.enemies[enemyIdx]
+func tryAttack(attacker, defender Battler) bool {
+	atkStats := attacker.GetStats()
+	defStats := defender.GetStats()
 
-	cm.ExecuteAttack(g, g, enemy)
-
-	if enemy.HP <= 0 {
-		g.actorGainXP(&g.Player, enemyDefs[enemy.kind].xp) // あなたが経験値を獲得
-		g.dropChest(enemy.Actor.X, enemy.Actor.Y, enemy.Actor.Inventory)
-		g.enemies = append(g.enemies[:enemyIdx], g.enemies[enemyIdx+1:]...)
+	// 防御側の運が高ければ、運で避けられる
+	// 0 - 90%の確率で避けられる
+	if defStats.Luk > atkStats.Luk {
+		lukRate := float64(defStats.Luk) / float64(MaxLuk)
+		dodgeChance := int(lukRate * 90)
+		if rand.Intn(100) < dodgeChance {
+			return true
+		}
 	}
+
+	// Agiの差が 5%ずつ影響する
+	chance := (atkStats.Agi - defStats.Agi) * 5
+
+	attackChance := atkStats.BaseAccuracy + chance
+
+	return rand.Intn(100) < int(attackChance*100)
 }
 
-func (cm *CombatManager) AttackPlayer(g *GameScene, enemyIdx int) {
-	if enemyIdx < 0 || enemyIdx >= len(g.enemies) {
-		return
-	}
-	enemy := &g.enemies[enemyIdx]
+func (cm *CombatManager) ResolveCombat(bus *EventBus, attacker, defender Battler) {
+	cType := attacker.GetCombatType()
 
-	// 命中・回避判定
-	if g.tryDodge(enemyDefs[enemy.kind].acc) {
-		g.pushMessage(fmt.Sprintf("%sの攻撃をかわした！", enemy.GetName()))
-		return
+	if tryAttack(attacker, defender) {
+		cm.ExecuteAttack(bus, cType, attacker, defender)
+	} else {
+		bus.Publish(MsgLog{Text: fmt.Sprintf("%sは%sの攻撃をかわした！", defender.GetName(), attacker.GetName())})
 	}
 
-	cm.ExecuteAttack(g, enemy, g)
-
-	if g.Player.HP <= 0 {
-		g.Player.HP = 0
-		g.playState = StateDead
-		g.pushMessage("あなたは力尽きた...")
+	toXPatk := -1
+	toXPdef := -1
+	if defender.GetCurrentHP() <= 0 {
+		OnDeath(bus, defender)
+		toXPatk = defender.GetRewardXP()
 	}
+	if attacker.GetCurrentHP() <= 0 {
+		OnDeath(bus, attacker)
+		toXPdef = attacker.GetRewardXP()
+	}
+
+	if toXPatk >= 0 {
+		attacker.GainXP(bus, toXPatk)
+	}
+	if toXPdef >= 0 {
+		defender.GainXP(bus, toXPdef)
+	}
+
+}
+
+func OnDeath(bus *EventBus, battler Battler) {
+	battler.OnDeath(bus)
+	bus.Publish(MsgDeath{Battler: battler})
 }
 
 // 戦闘に参加する存在のインターフェース
 type Battler interface {
-	GetID() int64                                 // ユニークID
-	GetStats() Stats                              // 攻撃力、属性などを返す
-	ApplyDamage(dmg int)                          // ダメージを受ける処理
-	GetName() string                              // 名前（ログ用）
-	GetRace() Race                                // 種族
-	GetLevel() int                                // レベル
-	ConsumeDurability(g *GameScene, et EquipType) // 装備の耐久度を減らす
-	UpdateRelation(targetID int64, delta int)     // 関係性の更新
-	GetRelation(target Battler) RelationState     // 対象への関係性
+	GetID() int64                                  // ユニークID
+	GetStats() Stats                               // 攻撃力、属性などを返す
+	ApplyDamage(dmg int)                           // ダメージを受ける処理
+	GetName() string                               // 名前（ログ用）
+	GetRace() Race                                 // 種族
+	GetLevel() int                                 // レベル
+	ConsumeDurability(bus *EventBus, et EquipType) // 装備の耐久度を減らす
+	UpdateRelation(targetID int64, delta int)      // 関係性の更新
+	GetRelation(target Battler) RelationState      // 対象への関係性
+	GetCombatType() CombatType                     // 攻撃側の戦闘形式
+	GetCurrentHP() int                             // 現在のHP
+	GetCurrentMP() int                             // 現在のMP
+	GetRewardXP() int                              // 報酬経験値
+	GainXP(bus *EventBus, amount int)              // 経験値の取得処理
+	OnDeath(bus *EventBus)                         // 死亡時の処理
 }
 
 type Stats struct {
-	Attack  int
-	Defense int
-	Element Element
+	PhysicalAttack               int
+	PhysicalDefense              int
+	MagicalAttack                int
+	MagicalDefense               int
+	BaseAccuracy                 int // 0-100の間
+	Element                      Element
+	Str, Wis, Fai, Vit, Agi, Luk int
 }
 
 // 相性倍率の定義（例: 2.0倍、0.5倍など）
@@ -158,43 +197,62 @@ func GetEffectiveness(attacker, defender Element) float64 {
 	return 1.0 // 通常ダメージ
 }
 
-func (cm *CombatManager) ExecuteAttack(g *GameScene, attacker Battler, defender Battler) int {
+func (cm *CombatManager) ExecuteAttack(bus *EventBus, cType CombatType, attacker Battler, defender Battler) int {
 	atkStats := attacker.GetStats()
 	defStats := defender.GetStats()
 
 	// 1. ダメージ計算 (属性相性も適用)
 	multiplier := GetEffectiveness(atkStats.Element, defStats.Element)
-	damage := int(float64(atkStats.Attack-defStats.Defense) * multiplier)
-	if damage < 1 {
-		damage = 1 // 最低1ダメージ
+
+	attack := 0
+	defence := 0
+
+	switch cType {
+	case CombatTypePhysical:
+		{
+			attack += atkStats.PhysicalAttack
+			defence += defStats.PhysicalDefense
+		}
+	case CombatTypeMagical:
+		{
+			attack += atkStats.MagicalAttack
+			defence += defStats.MagicalDefense
+		}
 	}
 
-	// 2. 実行
-	defender.ApplyDamage(damage)
+	damage := int(float64(attack-defence) * multiplier)
 
-	// 3. 関係性の更新 (攻撃された側は攻撃した側を嫌う)
-	// ダメージ 1 につき -5 程度の悪化（閾値にあわせる）
-	defender.UpdateRelation(attacker.GetID(), -damage*5)
+	if damage < 0 {
+		damage = 0 // 最低0ダメージ
+	}
 
-	// 4. 耐久度消費
-	attacker.ConsumeDurability(g, EquipWeapon)
-	defender.ConsumeDurability(g, EquipShield)
-	defender.ConsumeDurability(g, EquipArmor)
+	// 2. 関係性の更新 (攻撃された側は攻撃した側を嫌う)
+	// 0ダメージでも嫌う
+	defender.UpdateRelation(attacker.GetID(), min(-damage, -1))
 
-	// 5. ログ出力
+	// 3. 耐久度消費
+	attacker.ConsumeDurability(bus, EquipWeapon)
+	defender.ConsumeDurability(bus, EquipShield)
+	defender.ConsumeDurability(bus, EquipArmor)
+
+	// 4. ログ出力
 	if multiplier > 1.1 {
-		g.pushMessage("効果は抜群だ！")
+		bus.Publish(MsgLog{Text: "効果は抜群だ！"})
 	} else if multiplier < 0.9 {
-		g.pushMessage("効果はいまひとつのようだ...")
+		bus.Publish(MsgLog{Text: "効果はいまひとつのようだ..."})
 	}
 
-	if attacker.GetID() == g.Player.ID {
-		g.pushMessage(fmt.Sprintf("%sに %d のダメージを与えた！", defender.GetName(), damage))
-	} else if defender.GetID() == g.Player.ID {
-		g.pushMessage(fmt.Sprintf("%sから %d のダメージを受けた！", attacker.GetName(), damage))
+	if attacker.GetID() == 1 { // TODO: プレイヤーIDの定数化
+		bus.Publish(MsgLog{Text: fmt.Sprintf("%sに %d のダメージを与えた！", defender.GetName(), damage)})
+	} else if defender.GetID() == 1 {
+		bus.Publish(MsgLog{Text: fmt.Sprintf("%sから %d のダメージを受けた！", attacker.GetName(), damage)})
 	} else {
-		g.pushMessage(fmt.Sprintf("%sが%sに %d のダメージを与えた！", attacker.GetName(), defender.GetName(), damage))
+		bus.Publish(MsgLog{Text: fmt.Sprintf("%sが%sに %d のダメージを与えた！", attacker.GetName(), defender.GetName(), damage)})
 	}
+
+	// 5. 実行
+	defender.ApplyDamage(damage)
+	bus.Publish(MsgDamage{AttackerID: attacker.GetID(), TargetID: defender.GetID(), Damage: damage})
 
 	return damage
 }

@@ -64,7 +64,7 @@ func (s *DebugScene) refresh() {
 	switch s.category {
 	case 0: // Player
 		s.lines = append(s.lines, "=== PLAYER DETAILS ===")
-		s.inspectStruct(s.game.Player)
+		s.inspectStruct(s.game.Player.Actor)
 	case 1: // Enemies
 		s.lines = append(s.lines, fmt.Sprintf("=== ENEMIES (%d) ===", len(s.game.enemies)))
 		for i := range s.game.enemies {
@@ -95,6 +95,15 @@ func (s *DebugScene) refresh() {
 func (s *DebugScene) inspectStruct(v interface{}) {
 	val := reflect.ValueOf(v)
 	typ := reflect.TypeOf(v)
+
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	// ここで val が構造体であることを確認
+	if val.Kind() != reflect.Struct {
+		return
+	}
 
 	for i := 0; i < val.NumField(); i++ {
 		field := typ.Field(i)

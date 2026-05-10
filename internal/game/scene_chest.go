@@ -24,7 +24,7 @@ func (s *ChestScene) Update() (Scene, error) {
 	}
 
 	chest := &s.game.mapItems[s.chestIdx]
-	player := &s.game.Player
+	player := s.game.Player
 
 	// 左右のフォーカス切り替え
 	if inpututil.IsKeyJustPressed(ebiten.KeyTab) || inpututil.IsKeyJustPressed(ebiten.KeyLeft) || inpututil.IsKeyJustPressed(ebiten.KeyRight) {
@@ -61,7 +61,7 @@ func (s *ChestScene) Update() (Scene, error) {
 			if len(chest.Inventory) > 0 {
 				entry := chest.Inventory[s.leftCursor]
 				// プレイヤーの重量チェック
-				if s.game.addInventory(player, entry.kind, entry.Durability, entry.obtainedSeed, entry.obtainedFloor) {
+				if s.game.addInventory(&(player.Actor), entry.kind, entry.Durability, entry.obtainedSeed, entry.obtainedFloor) {
 					// 成功したらチェストから消す
 					chest.Inventory = append(chest.Inventory[:s.leftCursor], chest.Inventory[s.leftCursor+1:]...)
 					if s.leftCursor >= len(chest.Inventory) && s.leftCursor > 0 {
@@ -112,7 +112,7 @@ func (s *ChestScene) Draw(screen *ebiten.Image) {
 	)
 
 	chest := &s.game.mapItems[s.chestIdx]
-	player := &s.game.Player
+	player := s.game.Player
 
 	// チェストパネル
 	lClr := color.RGBA{60, 60, 100, 255}

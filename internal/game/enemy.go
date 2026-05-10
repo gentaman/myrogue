@@ -51,20 +51,21 @@ const (
 type EnemyKind int
 
 type enemyDef struct {
-	name              string
-	hp                int
-	atk               int
-	acc               int
-	def               int
-	element           Element
-	race              Race
-	personality       Personality
-	neutralThreshold  int
-	friendlyThreshold int
-	xp                int
-	rarity            int
-	clr               color.RGBA
-	floorMin          int
+	name string
+	hp   int
+	// atk                          int
+	// acc                          int
+	// def                          int
+	element                      Element
+	race                         Race
+	personality                  Personality
+	neutralThreshold             int
+	friendlyThreshold            int
+	xp                           int
+	rarity                       int
+	clr                          color.RGBA
+	floorMin                     int
+	str, wis, fai, vit, agi, luk int
 }
 
 var (
@@ -77,12 +78,12 @@ var (
 )
 
 type rawEnemy struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	HP                int    `json:"hp"`
-	ATK               int    `json:"atk"`
-	ACC               int    `json:"acc"`
-	DEF               int    `json:"def"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	HP   int    `json:"hp"`
+	// ATK               int    `json:"atk"`
+	// ACC               int    `json:"acc"`
+	// DEF               int    `json:"def"`
 	Element           string `json:"element"`
 	Race              string `json:"race"`
 	Personality       string `json:"personality"`
@@ -92,6 +93,12 @@ type rawEnemy struct {
 	Rarity            int    `json:"rarity"`
 	Color             string `json:"color"`
 	FloorMin          int    `json:"floor_min"`
+	Str               int    `json:"str"`
+	Wis               int    `json:"wis"`
+	Fai               int    `json:"fai"`
+	Vit               int    `json:"vit"`
+	Agi               int    `json:"agi"`
+	Luk               int    `json:"luk"`
 }
 
 func stringToElement(s string) Element {
@@ -171,11 +178,11 @@ func init() {
 	for i, raw := range rawEnemies {
 		enemyIDMap[raw.ID] = EnemyKind(i)
 		enemyDefs[i] = enemyDef{
-			name:              raw.Name,
-			hp:                raw.HP,
-			atk:               raw.ATK,
-			acc:               raw.ACC,
-			def:               raw.DEF,
+			name: raw.Name,
+			hp:   raw.HP,
+			// atk:               raw.ATK,
+			// acc:               raw.ACC,
+			// def:               raw.DEF,
 			element:           stringToElement(raw.Element),
 			race:              stringToRace(raw.Race),
 			personality:       stringToPersonality(raw.Personality),
@@ -185,6 +192,12 @@ func init() {
 			rarity:            raw.Rarity,
 			clr:               hexToRGBA(raw.Color),
 			floorMin:          raw.FloorMin,
+			str:               raw.Str,
+			wis:               raw.Wis,
+			fai:               raw.Fai,
+			vit:               raw.Vit,
+			agi:               raw.Agi,
+			luk:               raw.Luk,
 		}
 	}
 }
@@ -192,8 +205,9 @@ func init() {
 // Enemy は敵キャラクターを表す
 type Enemy struct {
 	Actor
-	state EnemyState // 警戒状態
-	kind  EnemyKind
+	state    EnemyState // 警戒状態
+	kind     EnemyKind
+	rewardXP int
 }
 
 func (e *Enemy) GetName() string { return enemyDefs[e.kind].name }
@@ -216,7 +230,7 @@ func (e *Enemy) GetRelation(target Battler) RelationState {
 	return RelationHostile
 }
 
-func (e *Enemy) ConsumeDurability(g *GameScene, et EquipType) {
+func (e *Enemy) ConsumeDurability(bus *EventBus, et EquipType) {
 	if et == EquipNone {
 		return
 	}
@@ -229,11 +243,16 @@ func (e *Enemy) ConsumeDurability(g *GameScene, et EquipType) {
 			}
 			entry.Durability--
 			if entry.Durability <= 0 {
+				// 敵の装備が壊れた時のメッセージは必要なら追加
 				e.Inventory = append(e.Inventory[:i], e.Inventory[i+1:]...)
 			}
 			return
 		}
 	}
+}
+
+func (e *Enemy) GetRewardXP() int {
+	return e.rewardXP
 }
 
 func (g *GameScene) isEnemyAt(x, y int) bool {
@@ -248,7 +267,7 @@ func (g *GameScene) isEnemyAt(x, y int) bool {
 // 特定のマスにいるユニット(敵 or プレイヤー)を返す
 func (g *GameScene) unitAt(x, y int) Battler {
 	if g.Player.X == x && g.Player.Y == y {
-		return g
+		return g.Player
 	}
 	for i := range g.enemies {
 		if g.enemies[i].X == x && g.enemies[i].Y == y {
@@ -262,8 +281,9 @@ func (g *GameScene) attackEnemy(x, y int) {
 	for i := range g.enemies {
 		e := &g.enemies[i]
 		if e.X == x && e.Y == y {
-			g.Combat.AttackEnemy(g, i)
-			playSFXHit()
+			// g.Combat.AttackEnemy(g, i)
+			g.Combat.ResolveCombat(g.Bus, g.Player, e)
+			g.Bus.Publish(MsgSFX{PCM: sfxHitPCM})
 			return
 		}
 	}
@@ -385,8 +405,8 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 	// 視界内の敵対ユニットを探す（プレイヤー含む）
 	var target Battler
 	if g.canSeeUnit(e, g.Player.X, g.Player.Y) {
-		if e.GetRelation(g) == RelationHostile {
-			target = g
+		if e.GetRelation(g.Player) == RelationHostile {
+			target = g.Player
 		}
 	}
 	if target == nil {
@@ -423,7 +443,7 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 			e.Dir = dirFromDelta(dx, dy)
 			e.AttackAnim = attackAnimFrames
 			if target.GetID() == g.Player.ID {
-				g.Combat.AttackPlayer(g, idx)
+				g.Combat.ResolveCombat(g.Bus, e, g.Player)
 			} else {
 				// ユニット間戦闘
 				var targetIdx int = -1
@@ -434,15 +454,20 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 					}
 				}
 				if targetIdx >= 0 {
-					g.Combat.ExecuteAttack(g, e, &g.enemies[targetIdx])
+					g.Combat.ResolveCombat(g.Bus, e, &g.enemies[targetIdx])
 					if g.enemies[targetIdx].HP <= 0 {
-						g.actorGainXP(&e.Actor, enemyDefs[g.enemies[targetIdx].kind].xp)
-						g.dropChest(g.enemies[targetIdx].X, g.enemies[targetIdx].Y, g.enemies[targetIdx].Inventory)
+						// 経験値獲得もイベント経由にする（既に ResolveCombat 内で処理されているはずだが、
+						// ユニット間戦闘の特殊ロジックがここにある場合は注意が必要）
+						// ResolveCombat は既に死亡判定と経験値獲得を行っている。
+
 						// 自分が消える可能性もあるが、ここでは target を消す
 						if targetIdx < idx {
 							idx--
 						}
-						g.enemies = append(g.enemies[:targetIdx], g.enemies[targetIdx+1:]...)
+						// 注意: ResolveCombat の中の OnDeath(bus, defender) が MsgDeath を発行し、
+						// GameScene のハンドラが RemoveEnemy を呼ぶため、二重削除を避ける必要がある。
+						// 現状の GameScene.OnDeath ハンドラが RemoveEnemy を呼ぶ実装になっているなら、
+						// ここでの append は不要になる可能性がある。
 					}
 				}
 			}
