@@ -13,24 +13,33 @@ type Renderer interface {
 }
 
 type InputState struct {
-	DirPressed bool
-	Dir        int // 0=up,1=down,2=left,3=right
-	Confirm    bool
-	Cancel     bool
-	Menu       bool
-	Inventory  bool
-	Log        bool
-	MapView    bool
-	Help       bool
-	Options    bool
-	Credit     bool
-	CharCreate bool
-	Restart    bool
-	Yes        bool
-	No         bool
-	Up         bool
-	Down       bool
-	Left       bool
-	Right      bool
-	Debug      bool
+	DirPressed    bool
+	Dir           int // 0=up,1=down,2=left,3=right
+	Confirm       bool
+	Cancel        bool
+	Menu          bool
+	Inventory     bool
+	Log           bool
+	MapView       bool
+	Help          bool
+	Options       bool
+	Credit        bool
+	CharCreate    bool
+	Restart       bool
+	Yes           bool
+	No            bool
+	Up            bool
+	Down          bool
+	Left          bool
+	Right         bool
+	Debug         bool
+	DebugFOV      bool
+	DebugGrid     bool
+	DebugEntityID bool
+	DebugReveal   bool
+	DebugSlowAnim bool
+	DebugFastAnim bool
+	DebugPause    bool
+	DebugStep     bool
+	DebugSkipAnim bool
 }

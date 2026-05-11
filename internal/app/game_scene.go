@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gentaman/myrogue/internal/animation"
+	"github.com/gentaman/myrogue/internal/clock"
 	"github.com/gentaman/myrogue/internal/core/action"
 	"github.com/gentaman/myrogue/internal/core/ai"
 	"github.com/gentaman/myrogue/internal/core/combat"
@@ -15,6 +16,7 @@ import (
 	"github.com/gentaman/myrogue/internal/core/rules"
 	"github.com/gentaman/myrogue/internal/core/turn"
 	"github.com/gentaman/myrogue/internal/core/world"
+	"github.com/gentaman/myrogue/internal/debug"
 	"github.com/gentaman/myrogue/internal/mapgen"
 )
 
@@ -62,6 +64,8 @@ type GameScene struct {
 	PendingDir   int
 
 	Audio AudioPlayer
+	Debug *debug.State
+	Clock *clock.ScaledClock
 }
 
 type MenuItem struct {
@@ -96,6 +100,8 @@ func NewGameScene(reg *content.Registry, audio AudioPlayer) *GameScene {
 		Registry:    reg,
 		AnimQueue:   animation.NewQueue(),
 		Audio:       audio,
+		Debug:       debug.NewState(),
+		Clock:       clock.New(),
 	}
 	g.Resolver = &rules.Resolver{Access: g, PlayerID: entity.ID(1)}
 	g.spawnPlayer(reg)
@@ -370,6 +376,10 @@ func (g *GameScene) isAnyAnimating() bool {
 }
 
 func (g *GameScene) tickAnimations() {
+	delta := g.Clock.Delta()
+	if delta <= 0 {
+		return
+	}
 	g.Anims.Each(func(id entity.ID, a *component.AnimState) {
 		if a.AttackAnim > 0 {
 			a.AttackAnim--
@@ -378,7 +388,7 @@ func (g *GameScene) tickAnimations() {
 			a.DamageAnim--
 		}
 	})
-	g.AnimQueue.Tick()
+	g.AnimQueue.TickWithDelta(delta)
 }
 
 func (g *GameScene) processEvents(events []action.Event) {
@@ -508,6 +518,8 @@ func equippedPhyDef(inv *component.Inventory, reg *content.Registry) int {
 
 func (g *GameScene) Update(input InputState) Scene {
 	g.Frame++
+	g.handleDebugInput(input)
+	g.Clock.Tick()
 
 	if g.isAnyAnimating() {
 		g.tickAnimations()
@@ -1021,6 +1033,7 @@ func (g *GameScene) Draw(r Renderer) {
 	g.drawWorld(r)
 	g.drawUI(r)
 	g.drawOverlays(r)
+	g.drawDebugHUD(r)
 }
 
 func (g *GameScene) drawWorld(r Renderer) {
@@ -1028,10 +1041,10 @@ func (g *GameScene) drawWorld(r Renderer) {
 
 	for x := 0; x < world.MapWidth; x++ {
 		for y := 0; y < world.MapHeight; y++ {
-			if !g.World.Explored[x][y] {
+			if !g.World.Explored[x][y] && !g.Debug.RevealMap {
 				continue
 			}
-			vis := g.World.Visible[x][y]
+			vis := g.World.Visible[x][y] || g.Debug.RevealMap
 			var clr Color
 			if vis {
 				switch g.World.Tiles[x][y] {
@@ -1066,11 +1079,15 @@ func (g *GameScene) drawWorld(r Renderer) {
 				continue
 			}
 			r.DrawRect(int(sx), int(sy), TileSize-2, TileSize-2, clr)
+			if g.Debug.ShowGrid {
+				r.DrawRect(int(sx), int(sy), TileSize-2, 1, Color{40, 40, 60, 100})
+				r.DrawRect(int(sx), int(sy), 1, TileSize-2, Color{40, 40, 60, 100})
+			}
 		}
 	}
 
 	for _, it := range g.World.Items {
-		if !g.World.Explored[it.X][it.Y] {
+		if !g.World.Explored[it.X][it.Y] && !g.Debug.RevealMap {
 			continue
 		}
 		var clr Color
@@ -1098,7 +1115,7 @@ func (g *GameScene) drawWorld(r Renderer) {
 		if pos == nil {
 			return
 		}
-		if !g.World.Visible[pos.X][pos.Y] && id != g.Player {
+		if !g.World.Visible[pos.X][pos.Y] && !g.Debug.RevealMap && id != g.Player {
 			return
 		}
 
@@ -1174,6 +1191,12 @@ func (g *GameScene) drawWorld(r Renderer) {
 			}
 		}
 		g.drawDirDot(r, pos.X, pos.Y, pos.Dir, dotClr, camX, camY)
+
+		if g.Debug.ShowEntityID {
+			ex := float64(pos.X*TileSize) - camX
+			ey := float64(pos.Y*TileSize) - camY - 4
+			r.DrawText(fmt.Sprintf("%d", id), 9, int(ex), int(ey), Color{255, 255, 0, 200}, false)
+		}
 	})
 
 	// Projectiles

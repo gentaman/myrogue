@@ -28,7 +28,11 @@ func (q *Queue) Add(p Projectile) {
 }
 
 func (q *Queue) Tick() {
-	q.Accumulator += q.Speed
+	q.TickWithDelta(q.Speed)
+}
+
+func (q *Queue) TickWithDelta(delta float64) {
+	q.Accumulator += delta
 	for q.Accumulator >= 1.0 {
 		q.Accumulator -= 1.0
 		alive := q.Projectiles[:0]
@@ -40,4 +44,9 @@ func (q *Queue) Tick() {
 		}
 		q.Projectiles = alive
 	}
+}
+
+func (q *Queue) SkipAll() {
+	q.Projectiles = q.Projectiles[:0]
+	q.Accumulator = 0
 }

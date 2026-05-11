@@ -71,5 +71,33 @@ func PollInput() app.InputState {
 		state.No = true
 	}
 
+	if inpututil.IsKeyJustPressed(ebt.KeyF1) {
+		state.Debug = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF2) {
+		state.DebugGrid = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF3) {
+		state.DebugFOV = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF4) {
+		state.DebugEntityID = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF5) {
+		state.DebugReveal = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF6) {
+		state.DebugSlowAnim = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF7) {
+		state.DebugPause = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF8) {
+		state.DebugStep = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF9) {
+		state.DebugSkipAnim = true
+	}
+
 	return state
 }
