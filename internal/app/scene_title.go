@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/gentaman/myrogue/internal/core/component"
 	"github.com/gentaman/myrogue/internal/core/content"
 	"github.com/gentaman/myrogue/internal/save"
 )
@@ -19,9 +20,21 @@ func NewTitleSceneWithDeps(reg *content.Registry, audio AudioPlayer, ss *save.Se
 	return &TitleScene{registry: reg, audio: audio, saveService: ss}
 }
 
+func (s *TitleScene) applyDefaultPlayerSettings() {
+	if len(s.registry.Players) > 0 {
+		p := &s.registry.Players[0]
+		// 例: 人間 (RaceHuman) / 無属性 (ElementNone) をデフォルトにする
+		p.Race = component.RaceHuman
+		p.Element = component.ElementNone
+		// 種族ボーナスの適用などは CharCreateScene と共通化するか、ここで直接書く
+	}
+}
+
 func (s *TitleScene) Update(input InputState) Scene {
 	if input.Confirm {
 		if s.registry != nil {
+			// クイックスタート: デフォルト設定（人間、無属性）で初期化
+			InitializePlayer(s.registry, component.RaceHuman, component.ElementNone)
 			return NewGameScene(s.registry, s.audio, s.saveService)
 		}
 	}
@@ -33,6 +46,7 @@ func (s *TitleScene) Update(input InputState) Scene {
 			return NewCharCreateScene(s.registry, s.audio, s.saveService)
 		}
 	}
+
 	if input.Options {
 		return NewOptionsScene(s, s.audio)
 	}
@@ -94,13 +108,13 @@ func (s *TitleScene) Draw(r Renderer) {
 	r.Clear(10, 10, 30, 255)
 	r.DrawText("My Rogue", 32, ScreenWidth/2, 120, Color{255, 220, 100, 255}, true)
 	r.DrawText("ダンジョンを探索し、宝を持ち帰れ", 14, ScreenWidth/2, 180, Color{200, 200, 200, 255}, true)
-	r.DrawText("Enter / Space : ゲーム開始", 14, ScreenWidth/2, 280, Color{255, 255, 255, 255}, true)
+	r.DrawText("Enter / Space : クイックスタート", 14, ScreenWidth/2, 280, Color{255, 255, 255, 255}, true)
 	loadClr := Color{100, 100, 100, 255}
 	if s.saveService != nil && s.saveService.HasSave("slot1") {
 		loadClr = Color{255, 255, 255, 255}
 	}
 	r.DrawText("R : ロード", 14, ScreenWidth/2, 310, loadClr, true)
-	r.DrawText("E : キャラクター作成", 14, ScreenWidth/2, 340, Color{255, 255, 255, 255}, true)
+	r.DrawText("E : キャラクター作成して開始", 14, ScreenWidth/2, 340, Color{255, 255, 255, 255}, true)
 	r.DrawText("H : 操作説明", 14, ScreenWidth/2, 370, Color{255, 255, 255, 255}, true)
 	r.DrawText("O : オプション", 14, ScreenWidth/2, 400, Color{255, 255, 255, 255}, true)
 	r.DrawText("C : クレジット", 14, ScreenWidth/2, 430, Color{255, 255, 255, 255}, true)

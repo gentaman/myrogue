@@ -8,12 +8,13 @@ import (
 )
 
 type Registry struct {
-	Players    []ActorDef
-	Enemies    []ActorDef
-	Companions []ActorDef
-	Items      []ItemDef
-	Skills     []SkillDef
-	Floors     []FloorDef
+	Players        []ActorDef
+	PlayerTemplate ActorDef // プレイヤーの初期状態テンプレート
+	Enemies        []ActorDef
+	Companions     []ActorDef
+	Items          []ItemDef
+	Skills         []SkillDef
+	Floors         []FloorDef
 
 	PlayerIDMap    map[string]int
 	EnemyIDMap     map[string]int
@@ -63,6 +64,7 @@ func (r *Registry) LoadAll(players, enemies, companions, items, floors []byte, o
 	}
 	if len(r.Players) > 0 {
 		r.MaxCarryWeight = r.Players[0].MaxCarryWeight
+		r.PlayerTemplate = r.Players[0] // テンプレートとして保存
 	}
 	return nil
 }

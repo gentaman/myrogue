@@ -93,12 +93,15 @@ func PollInput() app.InputState {
 		state.DebugSlowAnim = true
 	}
 	if inpututil.IsKeyJustPressed(ebt.KeyF7) {
-		state.DebugPause = true
+		state.DebugFastAnim = true
 	}
 	if inpututil.IsKeyJustPressed(ebt.KeyF8) {
-		state.DebugStep = true
+		state.DebugPause = true
 	}
 	if inpututil.IsKeyJustPressed(ebt.KeyF9) {
+		state.DebugStep = true
+	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF10) {
 		state.DebugSkipAnim = true
 	}
 

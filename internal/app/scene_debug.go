@@ -10,6 +10,9 @@ import (
 )
 
 func (g *GameScene) handleDebugInput(input InputState) {
+	if !debug.Enabled {
+		return
+	}
 	if input.Debug {
 		g.Debug.Toggle()
 	}
@@ -18,6 +21,9 @@ func (g *GameScene) handleDebugInput(input InputState) {
 	}
 	if input.DebugFOV {
 		g.Debug.ShowFOV = !g.Debug.ShowFOV
+		// TODO: Implement FOV visualization
+		// - Highlight tiles in FOV with distinctive color
+		// - Show entities outside FOV when enabled
 	}
 	if input.DebugGrid {
 		g.Debug.ShowGrid = !g.Debug.ShowGrid
@@ -86,7 +92,7 @@ func (g *GameScene) debugSnapshot() debug.Snapshot {
 }
 
 func (g *GameScene) drawDebugHUD(r Renderer) {
-	if !g.Debug.ShowHUD {
+	if !debug.Enabled || !g.Debug.ShowHUD {
 		return
 	}
 	snap := g.debugSnapshot()

@@ -13,11 +13,11 @@
     "rarity": 0,
     "xp": 0,
     "color": "#FFFFFF",
-    "str": 5,
-    "wis": 5,
-    "fai": 5,
-    "vit": 5,
-    "agi": 5,
-    "luk": 5
+    "str": 3,
+    "wis": 3,
+    "fai": 3,
+    "vit": 3,
+    "agi": 3,
+    "luk": 3
   }
 ]

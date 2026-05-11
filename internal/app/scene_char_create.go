@@ -112,18 +112,7 @@ func (s *CharCreateScene) startGame() Scene {
 	race := selectableRaces[s.raceCursor]
 	elem := selectableElements[s.elemCursor]
 
-	if len(s.registry.Players) > 0 {
-		p := &s.registry.Players[0]
-		bonus := raceBonus[race]
-		p.Race = race
-		p.Element = elem
-		p.Str += bonus[0]
-		p.Wis += bonus[1]
-		p.Fai += bonus[2]
-		p.Vit += bonus[3]
-		p.Agi += bonus[4]
-		p.Luk += bonus[5]
-	}
+	InitializePlayer(s.registry, race, elem)
 
 	return NewGameScene(s.registry, s.audio, s.saveService)
 }
@@ -170,7 +159,8 @@ func (s *CharCreateScene) Draw(r Renderer) {
 		r.DrawText(fmt.Sprintf("属性: %s", elementNames[elem]), 14, ScreenWidth/2, 160, Color{255, 255, 255, 255}, true)
 
 		bonus := raceBonus[race]
-		base := [6]int{5, 5, 5, 5, 5, 5}
+		p := &s.registry.Players[0]
+		base := [6]int{p.Str, p.Wis, p.Fai, p.Vit, p.Agi, p.Luk}
 		r.DrawText(fmt.Sprintf("STR:%d WIS:%d FAI:%d VIT:%d AGI:%d LUK:%d",
 			base[0]+bonus[0], base[1]+bonus[1], base[2]+bonus[2],
 			base[3]+bonus[3], base[4]+bonus[4], base[5]+bonus[5]),
