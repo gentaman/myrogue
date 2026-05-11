@@ -41,27 +41,49 @@ func (b *AllyBrain) Decide(ctx *DecisionContext) action.Action {
 }
 
 func (b *AllyBrain) findHostile(ctx *DecisionContext) (entity.ID, int, int) {
+	var bestID entity.ID = entity.InvalidID
+	var bx, by int
+	minDist := 999
+
+	// 敵陣営のユニットを検索
 	enemies := ctx.Query.EntitiesWithFaction(component.FactionEnemy)
 	for _, id := range enemies {
 		pos := ctx.Query.GetPosition(id)
 		if pos == nil || !ctx.Query.IsAlive(id) {
 			continue
 		}
-		if world.CanSee(ctx.World, ctx.SelfPos.X, ctx.SelfPos.Y, pos.X, pos.Y) {
+		dist := world.Abs(ctx.SelfPos.X-pos.X) + world.Abs(ctx.SelfPos.Y-pos.Y)
+		if dist < minDist && world.CanSee(ctx.World, ctx.SelfPos.X, ctx.SelfPos.Y, pos.X, pos.Y) {
 			rel := b.getRelation(ctx, id)
 			if rel == component.RelationHostile {
-				return id, pos.X, pos.Y
+				minDist = dist
+				bestID = id
+				bx, by = pos.X, pos.Y
 			}
 		}
 	}
-	return entity.InvalidID, 0, 0
+
+	return bestID, bx, by
 }
 
 func (b *AllyBrain) getRelation(ctx *DecisionContext, target entity.ID) component.RelationState {
 	selfFaction := ctx.Query.GetFaction(ctx.Self)
-	if selfFaction == nil {
+	targetFaction := ctx.Query.GetFaction(target)
+	if selfFaction == nil || targetFaction == nil {
 		return component.RelationNeutral
 	}
+
+	// 同じ陣営なら友好的
+	if selfFaction.Faction == targetFaction.Faction || targetFaction.Faction == component.FactionPlayer {
+		return component.RelationFriendly
+	}
+
+	// 敵対陣営なら敵対
+	if targetFaction.Faction == component.FactionEnemy {
+		return component.RelationHostile
+	}
+
+	// 個別の関係性スコアによる判定
 	score := selfFaction.Relations[target]
 	if score <= ctx.SelfAI.NeutralThreshold {
 		return component.RelationHostile

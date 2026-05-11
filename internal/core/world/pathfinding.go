@@ -63,36 +63,38 @@ func BFSFleeStep(gm *GameMap, startX, startY, fearX, fearY int, blocked BlockedF
 }
 
 func CanSee(gm *GameMap, fromX, fromY, toX, toY int) bool {
-	fr := gm.RoomOf(fromX, fromY)
-	tr := gm.RoomOf(toX, toY)
-	if fr != -1 && fr == tr {
-		return true
+	dx := Abs(toX - fromX)
+	dy := Abs(toY - fromY)
+	sx := -1
+	if fromX < toX {
+		sx = 1
 	}
-	if fromX == toX {
-		minY, maxY := fromY, toY
-		if minY > maxY {
-			minY, maxY = maxY, minY
+	sy := -1
+	if fromY < toY {
+		sy = 1
+	}
+	err := dx - dy
+
+	x, y := fromX, fromY
+	for {
+		if x == toX && y == toY {
+			return true
 		}
-		for y := minY + 1; y < maxY; y++ {
-			if gm.Tiles[fromX][y] == Wall {
+		if x != fromX || y != fromY {
+			if gm.Tiles[x][y] == Wall {
 				return false
 			}
 		}
-		return true
-	}
-	if fromY == toY {
-		minX, maxX := fromX, toX
-		if minX > maxX {
-			minX, maxX = maxX, minX
+		e2 := 2 * err
+		if e2 > -dy {
+			err -= dy
+			x += sx
 		}
-		for x := minX + 1; x < maxX; x++ {
-			if gm.Tiles[x][fromY] == Wall {
-				return false
-			}
+		if e2 < dx {
+			err += dx
+			y += sy
 		}
-		return true
 	}
-	return false
 }
 
 func Abs(x int) int {
