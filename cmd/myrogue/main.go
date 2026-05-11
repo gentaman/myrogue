@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 
-	"github.com/gentaman/myrogue/internal/game"
+	"github.com/gentaman/myrogue/internal/platform/ebiten"
 )
 
 func main() {
-	if err := game.Run(); err != nil {
+	if err := ebiten.Run(); err != nil {
 		log.Fatal(err)
 	}
 }

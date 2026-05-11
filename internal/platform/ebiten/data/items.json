@@ -1,0 +1,242 @@
+[
+  {
+    "id": "piece_of_paper",
+    "name": "紙切れ",
+    "desc": "価値のない紙切れ。軽く重さがない",
+    "effect_desc": "",
+    "weight": 0,
+    "rarity": 1,
+    "color": "#EAEAEA",
+    "durability": 1
+  },
+  {
+    "id": "heal_small",
+    "name": "回復薬（小）",
+    "desc": "草を煎じた素朴な薬。飲むとHPが5回復する。軽くて持ち運びやすい。",
+    "effect_desc": "HP +5",
+    "weight": 2,
+    "rarity": 1,
+    "color": "#64FF96",
+    "durability": 1,
+    "effect": {
+      "type": "heal",
+      "amount": 5,
+      "message": "回復薬（小）を使った！ HP +5"
+    }
+  },
+  {
+    "id": "heal_large",
+    "name": "回復薬（大）",
+    "desc": "希少な霊草から作られた上質な薬。飲むとHPが10回復する。効果は高いが重い。",
+    "effect_desc": "HP +10",
+    "weight": 4,
+    "rarity": 2,
+    "color": "#32DC50",
+    "durability": 1,
+    "effect": {
+      "type": "heal",
+      "amount": 10,
+      "message": "回復薬（大）を使った！ HP +10"
+    }
+  },
+  {
+    "id": "reveal_map",
+    "name": "フロアの地図",
+    "desc": "特定のフロアの全体像が描かれた古い地図。取得したフロアでのみ使用できる。他のフロアに持ち込んでも使えない。",
+    "effect_desc": "取得フロアのみ全探索",
+    "weight": 1,
+    "rarity": 1,
+    "color": "#FFDC50",
+    "durability": 1,
+    "floor_bound": true,
+    "can_use": {
+      "type": "check_same_floor",
+      "message": "この地図はフロア%dでしか使えない。"
+    },
+    "effect": {
+      "type": "reveal_map",
+      "message": "フロアの地図を使った！このフロアの全体が明らかになった。"
+    }
+  },
+  {
+    "id": "clairvoyant",
+    "name": "千里眼の薬",
+    "desc": "遠く離れた場所を見通す不思議な薬。使ったフロアの全体が明らかになる。どのフロアでも使えるので、深い階層まで温存するのも手だ。",
+    "effect_desc": "使用フロアのみ全探索",
+    "weight": 2,
+    "rarity": 3,
+    "color": "#64B4FF",
+    "durability": 1,
+    "effect": {
+      "type": "reveal_map",
+      "message": "千里眼の薬を飲んだ！フロア%dの全体が明らかになった。"
+    }
+  },
+  {
+    "id": "weapon_wood",
+    "name": "木の棒",
+    "desc": "その辺に落ちていた手頃な木の棒。素手よりはましだ。",
+    "effect_desc": "攻撃力 +1",
+    "weight": 3,
+    "rarity": 1,
+    "color": "#A0522D",
+    "durability": 10,
+    "effect": {
+      "type": "equip",
+      "equip_type": "weapon",
+      "atk": 1
+    }
+  },
+  {
+    "id": "weapon_iron",
+    "name": "鉄の剣",
+    "desc": "鍛冶屋が打ち出した鋭い剣。高い攻撃力を持つ。",
+    "effect_desc": "攻撃力 +3",
+    "weight": 5,
+    "rarity": 3,
+    "color": "#C0C0C0",
+    "durability": 50,
+    "effect": {
+      "type": "equip",
+      "equip_type": "weapon",
+      "atk": 3
+    }
+  },
+  {
+    "id": "shield_wood",
+    "name": "木の盾",
+    "desc": "木板を張り合わせただけの粗末な盾。少しは身を守れる。",
+    "effect_desc": "防御力 +1",
+    "weight": 3,
+    "rarity": 1,
+    "color": "#8B4513",
+    "durability": 10,
+    "effect": {
+      "type": "equip",
+      "equip_type": "shield",
+      "def": 1
+    }
+  },
+  {
+    "id": "shield_iron",
+    "name": "鉄の盾",
+    "desc": "頑丈な鉄板で作られた盾。多くの攻撃を弾き返す。",
+    "effect_desc": "防御力 +3",
+    "weight": 6,
+    "rarity": 3,
+    "color": "#A9A9A9",
+    "durability": 50,
+    "effect": {
+      "type": "equip",
+      "equip_type": "shield",
+      "def": 3
+    }
+  },
+  {
+    "id": "armor_wood",
+    "name": "木の鎧",
+    "desc": "薄い木板を繋ぎ合わせた鎧。動きにくいが防御力は上がる。",
+    "effect_desc": "防御力 +1",
+    "weight": 4,
+    "rarity": 2,
+    "color": "#DEB887",
+    "durability": 15,
+    "effect": {
+      "type": "equip",
+      "equip_type": "armor",
+      "def": 1
+    }
+  },
+  {
+    "id": "armor_iron",
+    "name": "鉄の鎧",
+    "desc": "重厚な鉄のプレートを組み合わせた鎧。圧倒的な防御力を誇るが、非常に重い。",
+    "effect_desc": "防御力 +3",
+    "weight": 8,
+    "rarity": 4,
+    "color": "#708090",
+    "durability": 60,
+    "effect": {
+      "type": "equip",
+      "equip_type": "armor",
+      "def": 3
+    }
+  },
+  {
+    "id": "fireball",
+    "name": "火炎の杖",
+    "desc": "火を噴く杖。MPを消費して正面の敵を焼き払う。",
+    "effect_desc": "MP -3  正面の敵にダメージ",
+    "weight": 3,
+    "rarity": 3,
+    "color": "#FF4500",
+    "durability": 20,
+    "effect": {
+      "type": "fireball",
+      "cost": 3,
+      "damage": 5,
+      "message": "炎が敵を包み込んだ！"
+    }
+  },
+  {
+    "id": "treasure",
+    "name": "伝説の宝",
+    "desc": "持ち帰るべき伝説の宝。非常に軽い。",
+    "effect_desc": "持ち帰り用",
+    "weight": 1,
+    "rarity": 100,
+    "color": "#FFD700",
+    "durability": -1
+  },
+  {
+    "id": "thunder_staff",
+    "name": "雷の杖",
+    "desc": "稲妻を放つ杖。遠くの敵を射抜くことができる。",
+    "effect_desc": "MP -4  遠距離攻撃",
+    "weight": 4,
+    "rarity": 4,
+    "color": "#FFF00A",
+    "durability": 20,
+    "effect": {
+      "type": "ranged_magic",
+      "cost": 4,
+      "damage": 8,
+      "range": 6,
+      "message": "雷光が奔った！",
+      "color": "#00FFFF"
+    }
+  },
+  {
+    "id": "goddess_statue",
+    "name": "木彫りの女神",
+    "desc": "小さな女神の像。祈りを捧げると癒やしの光が溢れる。",
+    "effect_desc": "信仰心でHP回復",
+    "weight": 2,
+    "rarity": 2,
+    "color": "#FFD700",
+    "durability": 5,
+    "effect": {
+      "type": "heal_faith",
+      "message": "女神の光が体を包み、HPが回復した！"
+    }
+  },
+  {
+    "id": "scroll_holy_light",
+    "name": "聖なる光の巻物",
+    "desc": "周囲を浄化の光で包み込む巻物。自分の周囲2マスの敵を攻撃する。",
+    "effect_desc": "周囲2マスに光属性ダメージ",
+    "weight": 2,
+    "rarity": 4,
+    "color": "#FFFFA0",
+    "durability": 1,
+    "effect": {
+      "type": "area_magic",
+      "damage": 10,
+      "cost": 0,
+      "range": 2,
+      "element": "light",
+      "message": "聖なる光が溢れ出した！",
+      "color": "#FFFFE0"
+    }
+  }
+]

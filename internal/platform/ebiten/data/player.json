@@ -1,0 +1,23 @@
+[
+  {
+    "id": "adventurer",
+    "name": "冒険者",
+    "hp": 20,
+    "mp": 10,
+    "max_carry_weight": 10,
+    "element": "none",
+    "race": "human",
+    "personality": "calculated",
+    "neutral_threshold": 0,
+    "friendly_threshold": 0,
+    "rarity": 0,
+    "xp": 0,
+    "color": "#FFFFFF",
+    "str": 5,
+    "wis": 5,
+    "fai": 5,
+    "vit": 5,
+    "agi": 5,
+    "luk": 5
+  }
+]
