@@ -119,7 +119,7 @@ func (s *CharacterCreateScene) startGame() Scene {
 
 	// プレイヤー生成
 	p := NewUserPlayer("あなた", race, s.level, str, wis, fai, vit, agi, luk, def.Element, def.HP, def.MP)
-	return newGameSceneWithState(p, 0, 0, false, nil)
+	return newGameSceneWithState(p, nil, 0, 0, false, nil)
 }
 
 func (s *CharacterCreateScene) Draw(screen *ebiten.Image) {

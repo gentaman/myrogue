@@ -19,6 +19,7 @@ const (
 
 type InventoryScene struct {
 	game         *GameScene
+	target       *Actor // nil の場合はプレイヤー
 	cursor       int
 	subMenu      invSubMenu
 	subCursor    int
@@ -27,8 +28,16 @@ type InventoryScene struct {
 
 var subMenuLabels = []string{"使う", "捨てる", "説明を見る", "キャンセル"}
 
+func (s *InventoryScene) getInventory() []InventoryEntry {
+	if s.target != nil {
+		return s.target.Inventory
+	}
+	return s.game.Player.Inventory
+}
+
 func (s *InventoryScene) clampCursor() {
-	n := len(s.game.Player.Inventory)
+	inv := s.getInventory()
+	n := len(inv)
 	if n == 0 {
 		s.cursor = 0
 		return
@@ -65,7 +74,8 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 	if hintW+padRight > panelW {
 		panelW = hintW + padRight
 	}
-	for _, entry := range s.game.Player.Inventory {
+	inv := s.getInventory()
+	for _, entry := range inv {
 		def := &itemDefs[entry.kind]
 		label := fmt.Sprintf("%s  x%d  (重%d)", def.entryName(entry), entry.count, def.weight)
 		w := measureText(label, fontFace14) + padX + padRight
@@ -76,7 +86,7 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 	if panelW > maxW {
 		panelW = maxW
 	}
-	n := len(s.game.Player.Inventory)
+	n := len(inv)
 	if n == 0 {
 		n = 1
 	}
@@ -93,7 +103,7 @@ func (s *InventoryScene) calcLayout() (panelW, panelH, visibleRows int) {
 }
 
 func (s *InventoryScene) Update() (Scene, error) {
-	inv := s.game.Player.Inventory
+	inv := s.getInventory()
 	if s.subMenu == invSubDesc {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 			s.subMenu = invSubNone
@@ -114,16 +124,29 @@ func (s *InventoryScene) Update() (Scene, error) {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 			switch s.subCursor {
 			case 0: // 使う
+				// 仲間の場合は「使う」を無効にするか、特別な処理にするか
+				// とりあえずプレイヤーのみ「使う」ができることにする
+				if s.target != nil {
+					s.game.pushMessage("仲間のアイテムは直接使えない。")
+					s.subMenu = invSubNone
+					return nil, nil
+				}
 				if s.game.useInventoryItem(s.cursor) {
 					s.clampCursor()
 					s.subMenu = invSubNone
 					s.game.turnCount++
-					s.game.turnState = TurnEnemyAct
+					s.game.turnState = TurnCompanionAct
 					s.game.activeEnemyIdx = 0
 					return s.game, nil
 				}
 			case 1: // 捨てる
-				s.game.dropInventoryItem(s.cursor)
+				if s.target != nil {
+					// 仲間のアイテムを捨てる
+					s.target.Inventory = append(s.target.Inventory[:s.cursor], s.target.Inventory[s.cursor+1:]...)
+					s.game.pushMessage("仲間のアイテムを捨てさせた。")
+				} else {
+					s.game.dropInventoryItem(s.cursor)
+				}
 				s.clampCursor()
 				s.subMenu = invSubNone
 			case 2: // 説明を見る
@@ -168,8 +191,14 @@ func (s *InventoryScene) Draw(screen *ebiten.Image) {
 	panelX := (screenWidth - panelW) / 2
 	panelY := (screenHeight - panelH) / 2
 	drawPanel(screen, panelX, panelY, panelW, panelH, color.RGBA{15, 20, 40, 255}, color.RGBA{80, 180, 100, 255})
-	drawText(screen, "アイテム", fontFace14, screenWidth/2, panelY+12, color.RGBA{150, 255, 150, 255}, true)
-	inv := s.game.Player.Inventory
+
+	title := "アイテム"
+	if s.target != nil {
+		title = s.target.GetName() + "の持ち物"
+	}
+	drawText(screen, title, fontFace14, screenWidth/2, panelY+12, color.RGBA{150, 255, 150, 255}, true)
+
+	inv := s.getInventory()
 	if len(inv) == 0 {
 		drawText(screen, "アイテムを持っていない", fontFace14, screenWidth/2, panelY+panelH/2-10, color.RGBA{120, 120, 120, 255}, true)
 	} else {
@@ -266,10 +295,11 @@ func (s *InventoryScene) drawSubMenu(screen *ebiten.Image, panelX, panelY, panel
 }
 
 func (s *InventoryScene) drawDescWindow(screen *ebiten.Image, panelX, panelY, panelW, panelH int) {
-	if s.cursor < 0 || s.cursor >= len(s.game.Player.Inventory) {
+	inv := s.getInventory()
+	if s.cursor < 0 || s.cursor >= len(inv) {
 		return
 	}
-	entry := s.game.Player.Inventory[s.cursor]
+	entry := inv[s.cursor]
 	def := itemDefs[entry.kind]
 	const (
 		dPad  = 16

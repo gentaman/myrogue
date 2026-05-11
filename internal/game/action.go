@@ -7,6 +7,7 @@ const (
 	menuKindAttack menuActionKind = iota
 	menuKindExamine
 	menuKindItem
+	menuKindCompanion
 	menuKindWait
 )
 
@@ -36,6 +37,18 @@ func (g *GameScene) adjacentEnemy() (int, int, bool) {
 	return -1, -1, false
 }
 
+// 隣接する仲間がいるか判定
+func (g *GameScene) adjacentCompanion() (int, bool) {
+	dx, dy := g.Player.Dir.delta()
+	nx, ny := g.Player.X+dx, g.Player.Y+dy
+	for i, c := range g.companions {
+		if c.X == nx && c.Y == ny {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
 // 足元の階段の種類を返す
 func (g *GameScene) currentStairType() TileType {
 	t := g.worldMap[g.Player.X][g.Player.Y]
@@ -55,6 +68,18 @@ func (g *GameScene) buildMenu() {
 		kind:    menuKindAttack,
 		label:   "正面を攻撃",
 		enabled: hasAdj,
+	})
+
+	// 仲間
+	compIdx, hasComp := g.adjacentCompanion()
+	labelComp := "仲間に指示を出す"
+	if hasComp {
+		labelComp = g.companions[compIdx].GetName() + "に指示を出す"
+	}
+	g.menuItems = append(g.menuItems, actionItem{
+		kind:    menuKindCompanion,
+		label:   labelComp,
+		enabled: hasComp,
 	})
 
 	// 調べる（拾う・階段）
@@ -103,6 +128,9 @@ func (g *GameScene) execMenuItem() (Scene, error) {
 		g.turnCount++
 		g.Player.AttackAnim = attackAnimFrames
 		g.attackEnemy(ex, ey)
+	case menuKindCompanion:
+		idx, _ := g.adjacentCompanion()
+		return &CompanionMenuScene{game: g, companionIdx: idx}, nil
 	case menuKindExamine:
 		g.turnCount++
 		// 足元に MapItem (宝箱/アイテム) があれば ChestScene を開く

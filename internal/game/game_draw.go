@@ -122,6 +122,19 @@ func (g *GameScene) drawWorld(screen *ebiten.Image) {
 		drawDirDot(screen, e.X, e.Y, e.Dir, dotClr, camX, camY)
 	}
 
+	// 仲間描画
+	for _, c := range g.companions {
+		if !g.visible[c.X][c.Y] {
+			continue
+		}
+		def := &companionDefs[c.kind]
+		g.drawActor(screen, &c.Actor, nil, def.Color, camX, camY)
+		// 仲間は緑色のドット
+		alpha := uint8(180 + 40*(g.frame/30%2))
+		dotClr := color.RGBA{100, 255, 100, alpha}
+		drawDirDot(screen, c.X, c.Y, c.Dir, dotClr, camX, camY)
+	}
+
 	// プレイヤー描画
 	g.drawActor(screen, &(g.Player.Actor), playerImage, color.White, camX, camY)
 	drawDirDot(screen, g.Player.X, g.Player.Y, g.Player.Dir, color.RGBA{255, 255, 255, 255}, camX, camY)
@@ -261,6 +274,26 @@ func (g *GameScene) drawOverlays(screen *ebiten.Image) {
 			drawText(screen, item.label, fontFace14, panelX+30, y, clr, false)
 		}
 		drawText(screen, "W/S: 選択  Enter: 決定  X/Esc: 閉じる", fontFace12, screenWidth/2, panelY+panelH-20, color.RGBA{120, 120, 120, 255}, true)
+	}
+	if g.confirmStair {
+		const (
+			dW = 340
+			dH = 100
+			dX = (screenWidth - dW) / 2
+			dY = (screenHeight - dH) / 2
+		)
+		drawPanel(screen, dX, dY, dW, dH, color.RGBA{30, 30, 20, 255}, color.RGBA{200, 180, 100, 255})
+		drawText(screen, "はぐれる仲間がいます！", fontFace14, screenWidth/2, dY+14, color.RGBA{255, 220, 100, 255}, true)
+		names := ""
+		for i, n := range g.stairLeftBehind {
+			if i > 0 {
+				names += "、"
+			}
+			names += n
+		}
+		drawText(screen, names+" は離れすぎている", fontFace12, screenWidth/2, dY+40, color.RGBA{220, 220, 220, 255}, true)
+		drawText(screen, "それでも移動しますか？", fontFace12, screenWidth/2, dY+58, color.RGBA{200, 200, 200, 255}, true)
+		drawText(screen, "Enter/Y: はい    Esc/N: いいえ", fontFace12, screenWidth/2, dY+80, color.RGBA{180, 180, 180, 255}, true)
 	}
 	if g.confirmQuit {
 		const (

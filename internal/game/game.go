@@ -45,6 +45,7 @@ type TurnState int
 
 const (
 	TurnPlayerInput TurnState = iota
+	TurnCompanionAct
 	TurnEnemyAct
 )
 
@@ -227,6 +228,7 @@ type GameScene struct {
 	projectiles    []Projectile
 	turnCount      int
 	enemies        []Enemy
+	companions     []Companion
 	activeEnemyIdx int // 現在行動中の敵のインデックス
 	rooms          []Room
 	maxEnemies     int
@@ -237,6 +239,11 @@ type GameScene struct {
 	menuOpen   bool
 	menuCursor int
 	menuItems  []actionItem
+
+	confirmStair     bool
+	stairLeftBehind  []string
+	pendingFloorMsg  MsgChangeFloor
+	pendingFloorComp []Companion
 
 	mapItems []MapItem
 
@@ -309,12 +316,13 @@ func (g *GameScene) RemoveEnemy(ID int64) {
 func NewGameScene() *GameScene {
 	def := playerDefs[0]
 	p := NewUserPlayer("あなた", RaceHuman, 1, def.Str, def.Wis, def.Fai, def.Vit, def.Agi, def.Luk, def.Element, def.HP, def.MP)
-	return newGameSceneWithState(p, 0, 0, false, nil)
+	return newGameSceneWithState(p, nil, 0, 0, false, nil)
 }
 
-func newGameSceneWithState(player *UserPlayer, turnCount, floor int, fromBelow bool, log []string) *GameScene {
+func newGameSceneWithState(player *UserPlayer, companions []Companion, turnCount, floor int, fromBelow bool, log []string) *GameScene {
 	g := &GameScene{
 		Player:     player,
+		companions: companions,
 		turnCount:  turnCount,
 		floor:      floor,
 		messageLog: log,
@@ -339,6 +347,8 @@ func newGameSceneWithState(player *UserPlayer, turnCount, floor int, fromBelow b
 		if msg.Battler.GetID() == g.Player.ID {
 			g.playState = StateDead
 			g.pushMessage("あなたは力尽きた...")
+		} else if g.RemoveCompanion(msg.Battler.GetID()) {
+			g.pushMessage(fmt.Sprintf("%sは倒れた...", msg.Battler.GetName()))
 		} else {
 			g.RemoveEnemy(msg.Battler.GetID())
 			g.pushMessage(fmt.Sprintf("%sは死亡した", msg.Battler.GetName()))
@@ -351,10 +361,29 @@ func newGameSceneWithState(player *UserPlayer, turnCount, floor int, fromBelow b
 		g.dropChest(msg.X, msg.Y, msg.Inventory)
 	})
 	g.Bus.OnChangeFloor(func(msg MsgChangeFloor) {
-		if msg.Direction > 0 {
-			g.nextScene = newGameSceneWithState(g.Player, g.turnCount, msg.CurrentFloor+1, false, g.messageLog)
+		// 階段移動時の同行判定
+		var nextComp []Companion
+		var leftBehind []string
+		for _, c := range g.companions {
+			dist := abs(c.X-g.Player.X) + abs(c.Y-g.Player.Y)
+			if dist <= 3 {
+				nextComp = append(nextComp, c)
+			} else {
+				leftBehind = append(leftBehind, c.GetName())
+			}
+		}
+
+		if len(leftBehind) > 0 {
+			g.confirmStair = true
+			g.stairLeftBehind = leftBehind
+			g.pendingFloorMsg = msg
+			g.pendingFloorComp = nextComp
 		} else {
-			g.nextScene = newGameSceneWithState(g.Player, g.turnCount, msg.CurrentFloor-1, true, g.messageLog)
+			if msg.Direction > 0 {
+				g.nextScene = newGameSceneWithState(g.Player, nextComp, g.turnCount, msg.CurrentFloor+1, false, g.messageLog)
+			} else {
+				g.nextScene = newGameSceneWithState(g.Player, nextComp, g.turnCount, msg.CurrentFloor-1, true, g.messageLog)
+			}
 		}
 	})
 	g.Bus.OnTransition(func(msg MsgTransition) {
@@ -373,6 +402,19 @@ func newGameSceneWithState(player *UserPlayer, turnCount, floor int, fromBelow b
 	}
 	g.updateVisibility()
 	g.spawnInitialEnemies()
+
+	// 初回フロアなら仲間（犬）をスポーンさせる
+	if floor == 0 && !fromBelow {
+		// プレイヤーの隣にスポーン
+		for _, d := range []struct{ dx, dy int }{{1, 0}, {-1, 0}, {0, 1}, {0, -1}} {
+			nx, ny := g.Player.X+d.dx, g.Player.Y+d.dy
+			if nx >= 0 && nx < mapWidth && ny >= 0 && ny < mapHeight && g.worldMap[nx][ny] == Floor {
+				g.spawnCompanion("dog", nx, ny)
+				break
+			}
+		}
+	}
+
 	return g
 }
 
@@ -468,6 +510,11 @@ func (g *GameScene) isAnyAnimating() bool {
 			return true
 		}
 	}
+	for _, c := range g.companions {
+		if c.AttackAnim > 0 || c.DamageAnim > 0 {
+			return true
+		}
+	}
 	return len(g.projectiles) > 0
 }
 
@@ -488,6 +535,14 @@ func (g *GameScene) updateAnimations() {
 			}
 			if g.enemies[i].DamageAnim > 0 {
 				g.enemies[i].DamageAnim--
+			}
+		}
+		for i := range g.companions {
+			if g.companions[i].AttackAnim > 0 {
+				g.companions[i].AttackAnim--
+			}
+			if g.companions[i].DamageAnim > 0 {
+				g.companions[i].DamageAnim--
 			}
 		}
 
@@ -529,9 +584,25 @@ func (g *GameScene) Update() (Scene, error) {
 		}
 		return nil, nil
 	}
+	if g.confirmStair {
+		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || inpututil.IsKeyJustPressed(ebiten.KeyN) {
+			g.confirmStair = false
+		} else if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyY) {
+			g.confirmStair = false
+			msg := g.pendingFloorMsg
+			if msg.Direction > 0 {
+				g.nextScene = newGameSceneWithState(g.Player, g.pendingFloorComp, g.turnCount, msg.CurrentFloor+1, false, g.messageLog)
+			} else {
+				g.nextScene = newGameSceneWithState(g.Player, g.pendingFloorComp, g.turnCount, msg.CurrentFloor-1, true, g.messageLog)
+			}
+		}
+		return nil, nil
+	}
 	switch g.turnState {
 	case TurnPlayerInput:
 		return g.updatePlayerTurn()
+	case TurnCompanionAct:
+		g.updateCompanionTurns()
 	case TurnEnemyAct:
 		g.updateEnemyTurns()
 	}
@@ -585,7 +656,7 @@ func (g *GameScene) updatePlayerTurn() (Scene, error) {
 			if scene != nil || err != nil {
 				return scene, err
 			}
-			g.turnState = TurnEnemyAct
+			g.turnState = TurnCompanionAct
 			g.activeEnemyIdx = 0
 		}
 		return nil, nil
@@ -614,16 +685,41 @@ func (g *GameScene) updatePlayerTurn() (Scene, error) {
 				if g.isEnemyAt(nx, ny) {
 					g.Player.AttackAnim = attackAnimFrames
 					g.attackEnemy(nx, ny)
+					g.turnState = TurnCompanionAct
+					g.activeEnemyIdx = 0
+				} else if g.isCompanionAt(nx, ny) {
+					// 仲間がいる場合は入れ替わるか、待機するか
+					// とりあえず入れ替わる処理にする
+					for i := range g.companions {
+						if g.companions[i].X == nx && g.companions[i].Y == ny {
+							g.companions[i].X, g.companions[i].Y = g.Player.X, g.Player.Y
+							break
+						}
+					}
+					g.Player.X, g.Player.Y = nx, ny
+					g.updateVisibility()
+					g.turnState = TurnCompanionAct
+					g.activeEnemyIdx = 0
 				} else {
 					g.Player.X, g.Player.Y = nx, ny
 					g.updateVisibility()
+					g.turnState = TurnCompanionAct
+					g.activeEnemyIdx = 0
 				}
-				g.turnState = TurnEnemyAct
-				g.activeEnemyIdx = 0
 			}
 		}
 	}
 	return nil, nil
+}
+
+func (g *GameScene) updateCompanionTurns() {
+	if g.activeEnemyIdx >= len(g.companions) {
+		g.turnState = TurnEnemyAct
+		g.activeEnemyIdx = 0
+		return
+	}
+	g.moveSingleCompanion(g.activeEnemyIdx)
+	g.activeEnemyIdx++
 }
 
 func (g *GameScene) updateEnemyTurns() {

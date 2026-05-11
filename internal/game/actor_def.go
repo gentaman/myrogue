@@ -28,6 +28,7 @@ type ActorDef struct {
 	XP                           int // エネミーの場合は討伐経験値
 	Rarity                       int
 	Color                        color.RGBA
+	FriendlyFire                 bool
 	Str, Wis, Fai, Vit, Agi, Luk int
 }
 
@@ -45,6 +46,7 @@ type rawActor struct {
 	XP                int    `json:"xp"`
 	Rarity            int    `json:"rarity"`
 	Color             string `json:"color"`
+	FriendlyFire      bool   `json:"friendly_fire"`
 	Str               int    `json:"str"`
 	Wis               int    `json:"wis"`
 	Fai               int    `json:"fai"`
@@ -54,11 +56,13 @@ type rawActor struct {
 }
 
 var (
-	playerDefs []ActorDef
-	enemyDefs  []ActorDef
+	playerDefs    []ActorDef
+	enemyDefs     []ActorDef
+	companionDefs []ActorDef
 
-	playerIDMap = map[string]int{}
-	enemyIDMap  = map[string]int{}
+	playerIDMap    = map[string]int{}
+	enemyIDMap     = map[string]int{}
+	companionIDMap = map[string]int{}
 
 	// ショートカット用
 	maxCarryWeight int
@@ -89,6 +93,7 @@ func loadActorDefs(data []byte) ([]ActorDef, map[string]int) {
 			XP:                raw.XP,
 			Rarity:            raw.Rarity,
 			Color:             hexToRGBA(raw.Color),
+			FriendlyFire:      raw.FriendlyFire,
 			Str:               raw.Str,
 			Wis:               raw.Wis,
 			Fai:               raw.Fai,
@@ -103,6 +108,7 @@ func loadActorDefs(data []byte) ([]ActorDef, map[string]int) {
 func initActorDefs() {
 	playerDefs, playerIDMap = loadActorDefs(playerJSON)
 	enemyDefs, enemyIDMap = loadActorDefs(enemiesJSON)
+	companionDefs, companionIDMap = loadActorDefs(companionsJSON)
 
 	if len(playerDefs) > 0 {
 		maxCarryWeight = playerDefs[0].MaxCarryWeight

@@ -32,6 +32,9 @@ var creditsText string
 //go:embed assets/enemies.json
 var enemiesJSON []byte
 
+//go:embed assets/companions.json
+var companionsJSON []byte
+
 //go:embed assets/player.json
 var playerJSON []byte
 

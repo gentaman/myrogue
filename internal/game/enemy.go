@@ -100,7 +100,7 @@ func (g *GameScene) isEnemyAt(x, y int) bool {
 	return false
 }
 
-// 特定のマスにいるユニット(敵 or プレイヤー)を返す
+// 特定のマスにいるユニット(敵 or プレイヤー or 仲間)を返す
 func (g *GameScene) unitAt(x, y int) Battler {
 	if g.Player.X == x && g.Player.Y == y {
 		return g.Player
@@ -108,6 +108,11 @@ func (g *GameScene) unitAt(x, y int) Battler {
 	for i := range g.enemies {
 		if g.enemies[i].X == x && g.enemies[i].Y == y {
 			return &g.enemies[i]
+		}
+	}
+	for i := range g.companions {
+		if g.companions[i].X == x && g.companions[i].Y == y {
+			return &g.companions[i]
 		}
 	}
 	return nil
@@ -238,11 +243,20 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 	e := &g.enemies[idx]
 	def := &enemyDefs[e.kind]
 
-	// 視界内の敵対ユニットを探す（プレイヤー含む）
+	// 視界内の敵対ユニットを探す（プレイヤー・仲間含む）
 	var target Battler
 	if g.canSeeUnit(e, g.Player.X, g.Player.Y) {
 		if e.GetRelation(g.Player) == RelationHostile {
 			target = g.Player
+		}
+	}
+	if target == nil {
+		for i := range g.companions {
+			c := &g.companions[i]
+			if g.canSeeUnit(e, c.X, c.Y) && e.GetRelation(c) == RelationHostile {
+				target = c
+				break
+			}
 		}
 	}
 	if target == nil {
@@ -265,10 +279,20 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 		if target.GetID() == g.Player.ID {
 			tx, ty = g.Player.X, g.Player.Y
 		} else {
-			for _, en := range g.enemies {
-				if en.ID == target.GetID() {
-					tx, ty = en.X, en.Y
+			found := false
+			for _, c := range g.companions {
+				if c.ID == target.GetID() {
+					tx, ty = c.X, c.Y
+					found = true
 					break
+				}
+			}
+			if !found {
+				for _, en := range g.enemies {
+					if en.ID == target.GetID() {
+						tx, ty = en.X, en.Y
+						break
+					}
 				}
 			}
 		}
@@ -281,16 +305,23 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 			if target.GetID() == g.Player.ID {
 				g.Combat.ResolveCombat(g.Bus, e, g.Player, e.GetCombatType(), 0, e.GetStats().Element)
 			} else {
-				// ユニット間戦闘
-				var targetIdx int = -1
-				for i := range g.enemies {
-					if g.enemies[i].ID == target.GetID() {
-						targetIdx = i
+				// 仲間への攻撃
+				companionTarget := false
+				for i := range g.companions {
+					if g.companions[i].ID == target.GetID() {
+						g.Combat.ResolveCombat(g.Bus, e, &g.companions[i], e.GetCombatType(), 0, e.GetStats().Element)
+						companionTarget = true
 						break
 					}
 				}
-				if targetIdx >= 0 {
-					g.Combat.ResolveCombat(g.Bus, e, &g.enemies[targetIdx], e.GetCombatType(), 0, e.GetStats().Element)
+				if !companionTarget {
+					// ユニット間戦闘（敵同士）
+					for i := range g.enemies {
+						if g.enemies[i].ID == target.GetID() {
+							g.Combat.ResolveCombat(g.Bus, e, &g.enemies[i], e.GetCombatType(), 0, e.GetStats().Element)
+							break
+						}
+					}
 				}
 			}
 			return
@@ -316,7 +347,7 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 
 		if nx != e.X || ny != e.Y {
 			e.Dir = dirFromDelta(nx-e.X, ny-e.Y)
-			if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) {
+			if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) && !g.isCompanionAt(nx, ny) {
 				e.X, e.Y = nx, ny
 			}
 		}
@@ -335,7 +366,7 @@ func (g *GameScene) moveSingleEnemy(idx int) {
 		}
 		if nx != e.X || ny != e.Y {
 			e.Dir = dirFromDelta(nx-e.X, ny-e.Y)
-			if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) {
+			if !g.isEnemyAt(nx, ny) && !(nx == g.Player.X && ny == g.Player.Y) && !g.isCompanionAt(nx, ny) {
 				e.X, e.Y = nx, ny
 			}
 		}
