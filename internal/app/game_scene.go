@@ -538,7 +538,7 @@ func (g *GameScene) Update(input InputState) Scene {
 			g.ConfirmStair = false
 		} else if input.Confirm || input.Yes {
 			g.ConfirmStair = false
-			// TODO: floor change
+			g.doChangeFloor(g.PendingDir)
 		}
 		return nil
 	}
@@ -600,7 +600,9 @@ func (g *GameScene) updatePlayerTurn(input InputState) Scene {
 			}
 		}
 		if input.Confirm {
-			g.execMenuItem()
+			if scene := g.execMenuItem(); scene != nil {
+				return scene
+			}
 		}
 		return nil
 	}
@@ -654,7 +656,164 @@ func (g *GameScene) handleMovement(dir int) {
 		pPos.X, pPos.Y = nx, ny
 	}
 	world.UpdateVisibility(g.World, pPos.X, pPos.Y)
+	g.checkTileAfterMove()
 	g.Scheduler.StartCompanionPhase()
+}
+
+func (g *GameScene) checkTileAfterMove() {
+	pPos := g.playerPos()
+	tile := g.World.Tiles[pPos.X][pPos.Y]
+	switch tile {
+	case world.Stairs:
+		if g.hasTreasure() {
+			g.PlayState = StateWin
+			g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d", g.calcScore()))
+			if g.Audio != nil {
+				g.Audio.PlaySFX("stair_up")
+			}
+		} else {
+			g.pushMessage("宝がない！まだ帰れない。")
+		}
+	case world.StairsDown:
+		if g.Audio != nil {
+			g.Audio.PlaySFX("stair_down")
+		}
+		g.tryChangeFloor(1)
+	case world.StairsUp:
+		if g.Audio != nil {
+			g.Audio.PlaySFX("stair_up")
+		}
+		g.tryChangeFloor(-1)
+	}
+}
+
+func (g *GameScene) tryChangeFloor(direction int) {
+	pPos := g.playerPos()
+	var leftBehind []string
+	allies := g.EntitiesWithFaction(component.FactionAlly)
+	for _, id := range allies {
+		aPos := g.GetPosition(id)
+		if aPos == nil {
+			continue
+		}
+		dist := abs(aPos.X-pPos.X) + abs(aPos.Y-pPos.Y)
+		if dist > 3 {
+			leftBehind = append(leftBehind, g.GetName(id))
+		}
+	}
+
+	if len(leftBehind) > 0 {
+		g.ConfirmStair = true
+		g.StairLeft = leftBehind
+		g.PendingDir = direction
+	} else {
+		g.doChangeFloor(direction)
+	}
+}
+
+func (g *GameScene) doChangeFloor(direction int) {
+	nextFloor := g.World.Floor + direction
+	if nextFloor < 0 {
+		nextFloor = 0
+	}
+
+	// Carry over companions that are close enough
+	pPos := g.playerPos()
+	allies := g.EntitiesWithFaction(component.FactionAlly)
+	var companionDefs []string
+	for _, id := range allies {
+		aPos := g.GetPosition(id)
+		if aPos == nil {
+			continue
+		}
+		dist := abs(aPos.X-pPos.X) + abs(aPos.Y-pPos.Y)
+		if dist <= 3 {
+			a, ok := g.Appearances.Get(id)
+			if ok {
+				companionDefs = append(companionDefs, a.DefID)
+			}
+		}
+	}
+
+	// Generate new floor
+	floorDef := g.Registry.GetFloorDef(nextFloor)
+	seed := time.Now().UnixNano()
+	g.World = mapgen.Generate(nextFloor, floorDef, g.Registry, seed)
+
+	// Remove old non-player entities
+	g.Positions.Each(func(id entity.ID, pos *component.Position) {
+		if id != g.Player {
+			g.Entities.Destroy(id)
+		}
+	})
+
+	// Place player
+	if direction > 0 {
+		// Going down — place at first room
+		if len(g.World.Rooms) > 0 {
+			r := g.World.Rooms[0]
+			pPos.X = r.CenterX()
+			pPos.Y = r.CenterY()
+		}
+	} else {
+		// Going up — place at StairsDown if exists
+		found := false
+		for x := 0; x < world.MapWidth && !found; x++ {
+			for y := 0; y < world.MapHeight && !found; y++ {
+				if g.World.Tiles[x][y] == world.StairsDown {
+					pPos.X, pPos.Y = x, y
+					found = true
+				}
+			}
+		}
+		if !found && len(g.World.Rooms) > 0 {
+			r := g.World.Rooms[0]
+			pPos.X = r.CenterX()
+			pPos.Y = r.CenterY()
+		}
+	}
+
+	// Spawn enemies and companions
+	g.spawnInitialEnemies()
+	for _, defID := range companionDefs {
+		g.spawnCompanion(defID)
+	}
+
+	world.UpdateVisibility(g.World, pPos.X, pPos.Y)
+	g.pushMessage(fmt.Sprintf("フロア %d に移動した。", nextFloor+1))
+}
+
+func (g *GameScene) hasTreasure() bool {
+	inv := g.GetInventory(g.Player)
+	if inv == nil {
+		return false
+	}
+	for _, entry := range inv.Items {
+		def, ok := g.Registry.GetItemDef(entry.DefID)
+		if ok && def.FloorBound {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *GameScene) calcScore() int {
+	stats := g.GetStats(g.Player)
+	if stats == nil {
+		return 0
+	}
+	base := stats.HP*100 - g.Scheduler.TurnCount
+	if base < 0 {
+		base = 0
+	}
+	return base * g.Registry.FloorCount()
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 func (g *GameScene) updateCompanionTurns() {
@@ -754,6 +913,9 @@ func (g *GameScene) buildMenu() {
 	g.MenuItems = append(g.MenuItems, MenuItem{Label: compLabel, Enabled: hasCompanion, Kind: menuCompanion})
 
 	examineLabel := "足元を調べる"
+	if g.itemAtFeet() >= 0 {
+		examineLabel = "足元のアイテムを調べる"
+	}
 	g.MenuItems = append(g.MenuItems, MenuItem{Label: examineLabel, Enabled: true, Kind: menuExamine})
 
 	inv := g.GetInventory(g.Player)
@@ -762,13 +924,13 @@ func (g *GameScene) buildMenu() {
 	g.MenuItems = append(g.MenuItems, MenuItem{Label: "その場で待機", Enabled: true, Kind: menuWait})
 }
 
-func (g *GameScene) execMenuItem() {
+func (g *GameScene) execMenuItem() Scene {
 	if g.MenuCursor >= len(g.MenuItems) {
-		return
+		return nil
 	}
 	item := g.MenuItems[g.MenuCursor]
 	if !item.Enabled {
-		return
+		return nil
 	}
 	g.MenuOpen = false
 	switch item.Kind {
@@ -786,15 +948,39 @@ func (g *GameScene) execMenuItem() {
 			g.resolveCombat(g.Player, target)
 		}
 		g.Scheduler.StartCompanionPhase()
+	case menuCompanion:
+		pPos := g.playerPos()
+		dx, dy := pPos.Dir.Delta()
+		fx, fy := pPos.X+dx, pPos.Y+dy
+		occ := g.UnitAt(fx, fy)
+		if occ != entity.InvalidID {
+			return &CompanionMenuScene{game: g, companionID: occ}
+		}
 	case menuWait:
 		g.Scheduler.IncrementTurn()
 		g.pushMessage("待機した。")
 		g.Scheduler.StartCompanionPhase()
 	case menuExamine:
 		g.Scheduler.IncrementTurn()
+		if idx := g.itemAtFeet(); idx >= 0 {
+			return &ChestScene{game: g, chestIdx: idx}
+		}
 		g.pushMessage("特に何もない。")
 		g.Scheduler.StartCompanionPhase()
+	case menuItem:
+		return &InventoryScene{game: g}
 	}
+	return nil
+}
+
+func (g *GameScene) itemAtFeet() int {
+	pPos := g.playerPos()
+	for i, it := range g.World.Items {
+		if it.X == pPos.X && it.Y == pPos.Y {
+			return i
+		}
+	}
+	return -1
 }
 
 func (g *GameScene) cameraOffset() (float64, float64) {
