@@ -210,7 +210,9 @@ func (g *GameScene) generateFloor(floor int) {
 	}
 
 	g.spawnInitialEnemies()
-	g.spawnCompanion("dog")
+	if g.Registry.SelectedCompanion != "" {
+		g.spawnCompanion(g.Registry.SelectedCompanion)
+	}
 	world.UpdateVisibility(g.World, g.playerPos().X, g.playerPos().Y)
 }
 

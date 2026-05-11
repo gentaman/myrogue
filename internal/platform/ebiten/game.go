@@ -14,7 +14,7 @@ type Game struct {
 
 func NewGame() *Game {
 	reg := content.NewRegistry()
-	if err := reg.LoadAll(PlayerJSON, EnemiesJSON, CompanionsJSON, ItemsJSON, FloorsJSON, SkillsJSON); err != nil {
+	if err := reg.LoadAll(PlayerJSON, EnemiesJSON, CompanionsJSON, ItemsJSON, FloorsJSON, RaceBonusJSON, SkillsJSON); err != nil {
 		panic(err)
 	}
 	audio := &Audio{}

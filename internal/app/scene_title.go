@@ -33,8 +33,8 @@ func (s *TitleScene) applyDefaultPlayerSettings() {
 func (s *TitleScene) Update(input InputState) Scene {
 	if input.Confirm {
 		if s.registry != nil {
-			// クイックスタート: デフォルト設定（人間、無属性）で初期化
-			InitializePlayer(s.registry, component.RaceHuman, component.ElementNone)
+			// クイックスタート: デフォルト設定（人間、無属性、従者なし）で初期化
+			InitializePlayer(s.registry, component.RaceHuman, component.ElementNone, "")
 			return NewGameScene(s.registry, s.audio, s.saveService)
 		}
 	}

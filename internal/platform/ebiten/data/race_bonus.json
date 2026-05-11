@@ -1,0 +1,22 @@
+[
+  {
+    "race": "human",
+    "str": 0, "wis": 0, "fai": 0, "vit": 0, "agi": 0, "luk": 2
+  },
+  {
+    "race": "elf",
+    "str": -1, "wis": 2, "fai": 1, "vit": -1, "agi": 2, "luk": 0
+  },
+  {
+    "race": "dwarf",
+    "str": 2, "wis": -1, "fai": 0, "vit": 3, "agi": -2, "luk": 0
+  },
+  {
+    "race": "gnome",
+    "str": -1, "wis": 3, "fai": 2, "vit": -1, "agi": 0, "luk": 0
+  },
+  {
+    "race": "halfling",
+    "str": -1, "wis": 0, "fai": 0, "vit": -1, "agi": 3, "luk": 2
+  }
+]

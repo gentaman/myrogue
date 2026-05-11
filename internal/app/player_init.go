@@ -6,26 +6,18 @@ import (
 )
 
 // InitializePlayer はプレイヤーのステータスをリセットし、指定された種族と属性に基づいて初期化します。
-func InitializePlayer(reg *content.Registry, race component.Race, elem component.Element) {
+func InitializePlayer(reg *content.Registry, race component.Race, elem component.Element, companionID string) {
 	if len(reg.Players) == 0 {
 		return
 	}
 
 	// テンプレートからリセット（player.json の値に戻す）
 	reg.Players[0] = reg.PlayerTemplate
+	reg.SelectedCompanion = companionID
 	p := &reg.Players[0]
 
-	// 種族ボーナスの定義
-	raceBonuses := map[component.Race][6]int{
-		component.RaceHuman:    {0, 0, 0, 0, 0, 0},
-		component.RaceElf:      {-1, 2, 1, -1, 2, 0},
-		component.RaceDwarf:    {2, -1, 0, 3, -2, 0},
-		component.RaceGnome:    {-1, 3, 2, -1, 0, 0},
-		component.RaceHalfling: {-1, 0, 0, -1, 3, 2},
-	}
-
 	// ボーナス適用
-	bonus := raceBonuses[race]
+	bonus := reg.RaceBonuses[race]
 	p.Race = race
 	p.Element = elem
 	p.Str += bonus[0]

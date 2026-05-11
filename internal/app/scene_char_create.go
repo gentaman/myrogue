@@ -12,9 +12,10 @@ type CharCreateScene struct {
 	registry    *content.Registry
 	audio       AudioPlayer
 	saveService *save.Service
-	phase       int // 0=race, 1=element, 2=confirm
+	phase       int // 0=race, 1=element, 2=companion, 3=confirm
 	raceCursor  int
 	elemCursor  int
+	compCursor  int
 }
 
 var selectableRaces = []component.Race{
@@ -23,14 +24,6 @@ var selectableRaces = []component.Race{
 	component.RaceDwarf,
 	component.RaceGnome,
 	component.RaceHalfling,
-}
-
-var raceBonus = map[component.Race][6]int{
-	component.RaceHuman:    {0, 0, 0, 0, 0, 2},
-	component.RaceElf:      {-1, 2, 1, -1, 2, 0},
-	component.RaceDwarf:    {2, -1, 0, 3, -2, 0},
-	component.RaceGnome:    {-1, 3, 2, -1, 0, 0},
-	component.RaceHalfling: {-1, 0, 0, -1, 3, 2},
 }
 
 var selectableElements = []component.Element{
@@ -101,6 +94,26 @@ func (s *CharCreateScene) Update(input InputState) Scene {
 		if input.Cancel {
 			s.phase = 1
 		}
+		maxComp := len(s.registry.Companions) + 1 // +1 for "None"
+		if input.Up {
+			s.compCursor--
+			if s.compCursor < 0 {
+				s.compCursor = maxComp - 1
+			}
+		}
+		if input.Down {
+			s.compCursor++
+			if s.compCursor >= maxComp {
+				s.compCursor = 0
+			}
+		}
+		if input.Confirm {
+			s.phase = 3
+		}
+	case 3:
+		if input.Cancel {
+			s.phase = 2
+		}
 		if input.Confirm {
 			return s.startGame()
 		}
@@ -112,7 +125,12 @@ func (s *CharCreateScene) startGame() Scene {
 	race := selectableRaces[s.raceCursor]
 	elem := selectableElements[s.elemCursor]
 
-	InitializePlayer(s.registry, race, elem)
+	companionID := ""
+	if s.compCursor > 0 && s.compCursor-1 < len(s.registry.Companions) {
+		companionID = s.registry.Companions[s.compCursor-1].ID
+	}
+
+	InitializePlayer(s.registry, race, elem, companionID)
 
 	return NewGameScene(s.registry, s.audio, s.saveService)
 }
@@ -131,7 +149,7 @@ func (s *CharCreateScene) Draw(r Renderer) {
 				clr = Color{255, 255, 100, 255}
 				r.DrawText("▶", 14, 140, y, clr, false)
 			}
-			bonus := raceBonus[race]
+			bonus := s.registry.RaceBonuses[race]
 			label := fmt.Sprintf("%s  STR%+d WIS%+d FAI%+d VIT%+d AGI%+d LUK%+d",
 				component.RaceNames[race], bonus[0], bonus[1], bonus[2], bonus[3], bonus[4], bonus[5])
 			r.DrawText(label, 12, 160, y, clr, false)
@@ -152,19 +170,44 @@ func (s *CharCreateScene) Draw(r Renderer) {
 		r.DrawText("Enter:決定  Esc:戻る", 11, ScreenWidth/2, ScreenHeight-30, Color{120, 120, 120, 255}, true)
 
 	case 2:
+		r.DrawText("従者を選択", 14, ScreenWidth/2, 70, Color{200, 200, 200, 255}, true)
+
+		options := []string{"なし"}
+		for _, c := range s.registry.Companions {
+			options = append(options, c.Name)
+		}
+
+		for i, name := range options {
+			y := 110 + i*28
+			clr := Color{200, 200, 200, 255}
+			if i == s.compCursor {
+				clr = Color{255, 255, 100, 255}
+				r.DrawText("▶", 14, 200, y, clr, false)
+			}
+			r.DrawText(name, 14, 220, y, clr, false)
+		}
+		r.DrawText("Enter:決定  Esc:戻る", 11, ScreenWidth/2, ScreenHeight-30, Color{120, 120, 120, 255}, true)
+
+	case 3:
 		race := selectableRaces[s.raceCursor]
 		elem := selectableElements[s.elemCursor]
-		r.DrawText("確認", 14, ScreenWidth/2, 70, Color{200, 200, 200, 255}, true)
-		r.DrawText(fmt.Sprintf("種族: %s", component.RaceNames[race]), 14, ScreenWidth/2, 130, Color{255, 255, 255, 255}, true)
-		r.DrawText(fmt.Sprintf("属性: %s", elementNames[elem]), 14, ScreenWidth/2, 160, Color{255, 255, 255, 255}, true)
+		compName := "なし"
+		if s.compCursor > 0 && s.compCursor-1 < len(s.registry.Companions) {
+			compName = s.registry.Companions[s.compCursor-1].Name
+		}
 
-		bonus := raceBonus[race]
+		r.DrawText("確認", 14, ScreenWidth/2, 70, Color{200, 200, 200, 255}, true)
+		r.DrawText(fmt.Sprintf("種族: %s", component.RaceNames[race]), 14, ScreenWidth/2, 110, Color{255, 255, 255, 255}, true)
+		r.DrawText(fmt.Sprintf("属性: %s", elementNames[elem]), 14, ScreenWidth/2, 140, Color{255, 255, 255, 255}, true)
+		r.DrawText(fmt.Sprintf("従者: %s", compName), 14, ScreenWidth/2, 170, Color{255, 255, 255, 255}, true)
+
+		bonus := s.registry.RaceBonuses[race]
 		p := &s.registry.Players[0]
 		base := [6]int{p.Str, p.Wis, p.Fai, p.Vit, p.Agi, p.Luk}
 		r.DrawText(fmt.Sprintf("STR:%d WIS:%d FAI:%d VIT:%d AGI:%d LUK:%d",
 			base[0]+bonus[0], base[1]+bonus[1], base[2]+bonus[2],
 			base[3]+bonus[3], base[4]+bonus[4], base[5]+bonus[5]),
-			12, ScreenWidth/2, 200, Color{180, 220, 255, 255}, true)
+			12, ScreenWidth/2, 210, Color{180, 220, 255, 255}, true)
 
 		r.DrawText("Enter:ゲーム開始  Esc:戻る", 11, ScreenWidth/2, ScreenHeight-30, Color{120, 120, 120, 255}, true)
 	}

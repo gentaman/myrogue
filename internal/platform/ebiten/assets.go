@@ -33,6 +33,9 @@ var sfxStairUpData []byte
 //go:embed data/sfx/Coin-3.wav
 var sfxCoinData []byte
 
+//go:embed data/race_bonus.json
+var RaceBonusJSON []byte
+
 //go:embed data/enemies.json
 var EnemiesJSON []byte
 

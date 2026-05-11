@@ -8,13 +8,15 @@ import (
 )
 
 type Registry struct {
-	Players        []ActorDef
-	PlayerTemplate ActorDef // プレイヤーの初期状態テンプレート
-	Enemies        []ActorDef
-	Companions     []ActorDef
-	Items          []ItemDef
-	Skills         []SkillDef
-	Floors         []FloorDef
+	Players           []ActorDef
+	PlayerTemplate    ActorDef // プレイヤーの初期状態テンプレート
+	SelectedCompanion string   // 選択された従者のID
+	Enemies           []ActorDef
+	RaceBonuses       map[component.Race][6]int
+	Companions        []ActorDef
+	Items             []ItemDef
+	Skills            []SkillDef
+	Floors            []FloorDef
 
 	PlayerIDMap    map[string]int
 	EnemyIDMap     map[string]int
@@ -35,7 +37,7 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (r *Registry) LoadAll(players, enemies, companions, items, floors []byte, optSkills ...[]byte) error {
+func (r *Registry) LoadAll(players, enemies, companions, items, floors, raceBonuses []byte, optSkills ...[]byte) error {
 	var err error
 	r.Players, r.PlayerIDMap, err = loadActors(players)
 	if err != nil {
@@ -48,6 +50,10 @@ func (r *Registry) LoadAll(players, enemies, companions, items, floors []byte, o
 	r.Companions, r.CompanionIDMap, err = loadActors(companions)
 	if err != nil {
 		return fmt.Errorf("companions: %w", err)
+	}
+	r.RaceBonuses, err = loadRaceBonuses(raceBonuses)
+	if err != nil {
+		return fmt.Errorf("race bonuses: %w", err)
 	}
 	r.Items, r.ItemIDMap, err = loadItems(items)
 	if err != nil {
@@ -221,4 +227,25 @@ func loadSkills(data []byte) ([]SkillDef, map[string]int, error) {
 		}
 	}
 	return defs, idMap, nil
+}
+
+func loadRaceBonuses(data []byte) (map[component.Race][6]int, error) {
+	var raws []struct {
+		Race string `json:"race"`
+		Str  int    `json:"str"`
+		Wis  int    `json:"wis"`
+		Fai  int    `json:"fai"`
+		Vit  int    `json:"vit"`
+		Agi  int    `json:"agi"`
+		Luk  int    `json:"luk"`
+	}
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return nil, err
+	}
+	res := make(map[component.Race][6]int)
+	for _, raw := range raws {
+		r := component.RaceFromString(raw.Race)
+		res[r] = [6]int{raw.Str, raw.Wis, raw.Fai, raw.Vit, raw.Agi, raw.Luk}
+	}
+	return res, nil
 }
