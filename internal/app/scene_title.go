@@ -1,24 +1,36 @@
 package app
 
-import "github.com/gentaman/myrogue/internal/core/content"
+import (
+	"github.com/gentaman/myrogue/internal/core/content"
+	"github.com/gentaman/myrogue/internal/save"
+)
 
 type TitleScene struct {
-	registry *content.Registry
-	audio    AudioPlayer
+	registry    *content.Registry
+	audio       AudioPlayer
+	saveService *save.Service
 }
 
 func NewTitleScene() *TitleScene {
 	return &TitleScene{}
 }
 
-func NewTitleSceneWithDeps(reg *content.Registry, audio AudioPlayer) *TitleScene {
-	return &TitleScene{registry: reg, audio: audio}
+func NewTitleSceneWithDeps(reg *content.Registry, audio AudioPlayer, ss *save.Service) *TitleScene {
+	return &TitleScene{registry: reg, audio: audio, saveService: ss}
 }
 
 func (s *TitleScene) Update(input InputState) Scene {
 	if input.Confirm {
 		if s.registry != nil {
-			return NewGameScene(s.registry, s.audio)
+			return NewGameScene(s.registry, s.audio, s.saveService)
+		}
+	}
+	if input.Restart {
+		return s.tryLoad()
+	}
+	if input.CharCreate {
+		if s.registry != nil {
+			return NewCharCreateScene(s.registry, s.audio, s.saveService)
 		}
 	}
 	if input.Options {
@@ -31,6 +43,20 @@ func (s *TitleScene) Update(input InputState) Scene {
 		return &TitleHelpScene{prev: s}
 	}
 	return nil
+}
+
+func (s *TitleScene) tryLoad() Scene {
+	if s.saveService == nil || s.registry == nil {
+		return nil
+	}
+	if !s.saveService.HasSave("slot1") {
+		return nil
+	}
+	snap, err := s.saveService.Load("slot1")
+	if err != nil {
+		return nil
+	}
+	return RestoreGameScene(snap, s.registry, s.audio, s.saveService)
 }
 
 type TitleHelpScene struct {
@@ -69,8 +95,13 @@ func (s *TitleScene) Draw(r Renderer) {
 	r.DrawText("My Rogue", 32, ScreenWidth/2, 120, Color{255, 220, 100, 255}, true)
 	r.DrawText("ダンジョンを探索し、宝を持ち帰れ", 14, ScreenWidth/2, 180, Color{200, 200, 200, 255}, true)
 	r.DrawText("Enter / Space : ゲーム開始", 14, ScreenWidth/2, 280, Color{255, 255, 255, 255}, true)
-	r.DrawText("E : キャラクター作成", 14, ScreenWidth/2, 310, Color{255, 255, 255, 255}, true)
-	r.DrawText("H : 操作説明", 14, ScreenWidth/2, 340, Color{255, 255, 255, 255}, true)
-	r.DrawText("O : オプション", 14, ScreenWidth/2, 370, Color{255, 255, 255, 255}, true)
-	r.DrawText("C : クレジット", 14, ScreenWidth/2, 400, Color{255, 255, 255, 255}, true)
+	loadClr := Color{100, 100, 100, 255}
+	if s.saveService != nil && s.saveService.HasSave("slot1") {
+		loadClr = Color{255, 255, 255, 255}
+	}
+	r.DrawText("R : ロード", 14, ScreenWidth/2, 310, loadClr, true)
+	r.DrawText("E : キャラクター作成", 14, ScreenWidth/2, 340, Color{255, 255, 255, 255}, true)
+	r.DrawText("H : 操作説明", 14, ScreenWidth/2, 370, Color{255, 255, 255, 255}, true)
+	r.DrawText("O : オプション", 14, ScreenWidth/2, 400, Color{255, 255, 255, 255}, true)
+	r.DrawText("C : クレジット", 14, ScreenWidth/2, 430, Color{255, 255, 255, 255}, true)
 }

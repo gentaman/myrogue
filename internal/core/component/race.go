@@ -44,6 +44,43 @@ var OrderedRaces = []Race{
 	RaceInsect, RaceBird, RaceDemon, RaceMachine, RaceHolyBeast,
 }
 
+func (r Race) String() string {
+	switch r {
+	case RaceHuman:
+		return "human"
+	case RaceElf:
+		return "elf"
+	case RaceDwarf:
+		return "dwarf"
+	case RaceGnome:
+		return "gnome"
+	case RaceHalfling:
+		return "halfling"
+	case RaceElement:
+		return "element"
+	case RaceBeast:
+		return "beast"
+	case RaceDragon:
+		return "dragon"
+	case RacePlant:
+		return "plant"
+	case RaceUndead:
+		return "undead"
+	case RaceInsect:
+		return "insect"
+	case RaceBird:
+		return "bird"
+	case RaceDemon:
+		return "demon"
+	case RaceMachine:
+		return "machine"
+	case RaceHolyBeast:
+		return "holy_beast"
+	default:
+		return "human"
+	}
+}
+
 func RaceFromString(s string) Race {
 	switch s {
 	case "human":

@@ -10,6 +10,30 @@ const (
 	FactionEnemy
 )
 
+func (f Faction) String() string {
+	switch f {
+	case FactionPlayer:
+		return "player"
+	case FactionAlly:
+		return "ally"
+	case FactionEnemy:
+		return "enemy"
+	default:
+		return "player"
+	}
+}
+
+func FactionFromString(s string) Faction {
+	switch s {
+	case "ally":
+		return FactionAlly
+	case "enemy":
+		return FactionEnemy
+	default:
+		return FactionPlayer
+	}
+}
+
 type FactionComp struct {
 	Faction   Faction
 	Relations map[entity.ID]int

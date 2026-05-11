@@ -64,6 +64,9 @@ func PollInput() app.InputState {
 	if inpututil.IsKeyJustPressed(ebt.KeyR) {
 		state.Restart = true
 	}
+	if inpututil.IsKeyJustPressed(ebt.KeyZ) {
+		state.Skill = true
+	}
 	if inpututil.IsKeyJustPressed(ebt.KeyY) {
 		state.Yes = true
 	}

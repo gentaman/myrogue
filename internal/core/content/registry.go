@@ -12,12 +12,14 @@ type Registry struct {
 	Enemies    []ActorDef
 	Companions []ActorDef
 	Items      []ItemDef
+	Skills     []SkillDef
 	Floors     []FloorDef
 
 	PlayerIDMap    map[string]int
 	EnemyIDMap     map[string]int
 	CompanionIDMap map[string]int
 	ItemIDMap      map[string]int
+	SkillIDMap     map[string]int
 
 	MaxCarryWeight int
 }
@@ -28,10 +30,11 @@ func NewRegistry() *Registry {
 		EnemyIDMap:     make(map[string]int),
 		CompanionIDMap: make(map[string]int),
 		ItemIDMap:      make(map[string]int),
+		SkillIDMap:     make(map[string]int),
 	}
 }
 
-func (r *Registry) LoadAll(players, enemies, companions, items, floors []byte) error {
+func (r *Registry) LoadAll(players, enemies, companions, items, floors []byte, optSkills ...[]byte) error {
 	var err error
 	r.Players, r.PlayerIDMap, err = loadActors(players)
 	if err != nil {
@@ -51,6 +54,12 @@ func (r *Registry) LoadAll(players, enemies, companions, items, floors []byte) e
 	}
 	if err := json.Unmarshal(floors, &r.Floors); err != nil {
 		return fmt.Errorf("floors: %w", err)
+	}
+	if len(optSkills) > 0 && optSkills[0] != nil {
+		r.Skills, r.SkillIDMap, err = loadSkills(optSkills[0])
+		if err != nil {
+			return fmt.Errorf("skills: %w", err)
+		}
 	}
 	if len(r.Players) > 0 {
 		r.MaxCarryWeight = r.Players[0].MaxCarryWeight
@@ -176,4 +185,38 @@ func (r *Registry) GetCompanionDef(defID string) (*ActorDef, bool) {
 		return nil, false
 	}
 	return &r.Companions[idx], true
+}
+
+func (r *Registry) GetSkillDef(defID string) (*SkillDef, bool) {
+	idx, ok := r.SkillIDMap[defID]
+	if !ok {
+		return nil, false
+	}
+	return &r.Skills[idx], true
+}
+
+func loadSkills(data []byte) ([]SkillDef, map[string]int, error) {
+	var raws []rawSkill
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return nil, nil, err
+	}
+	defs := make([]SkillDef, len(raws))
+	idMap := make(map[string]int)
+	for i, raw := range raws {
+		idMap[raw.ID] = i
+		defs[i] = SkillDef{
+			ID:       raw.ID,
+			Name:     raw.Name,
+			Desc:     raw.Desc,
+			Type:     skillTypeFromString(raw.Type),
+			Power:    raw.Power,
+			MPCost:   raw.MPCost,
+			Range:    raw.Range,
+			Element:  component.ElementFromString(raw.Element),
+			Status:   raw.Status,
+			Duration: raw.Duration,
+			ColorHex: raw.Color,
+		}
+	}
+	return defs, idMap, nil
 }

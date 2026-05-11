@@ -48,3 +48,22 @@ func ElementFromString(s string) Element {
 		return ElementNone
 	}
 }
+
+func (e Element) String() string {
+	switch e {
+	case ElementFire:
+		return "fire"
+	case ElementWater:
+		return "water"
+	case ElementAir:
+		return "air"
+	case ElementEarth:
+		return "earth"
+	case ElementLight:
+		return "light"
+	case ElementDark:
+		return "dark"
+	default:
+		return "none"
+	}
+}

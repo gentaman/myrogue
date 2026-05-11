@@ -1,0 +1,73 @@
+[
+  {
+    "id": "fire_bolt",
+    "name": "ファイアボルト",
+    "desc": "火属性の魔法弾を放つ",
+    "type": "attack",
+    "power": 12,
+    "mp_cost": 4,
+    "range": 5,
+    "element": "fire",
+    "color": "#FF4400"
+  },
+  {
+    "id": "ice_lance",
+    "name": "アイスランス",
+    "desc": "水属性の氷の槍で攻撃",
+    "type": "attack",
+    "power": 14,
+    "mp_cost": 5,
+    "range": 4,
+    "element": "water",
+    "color": "#44AAFF"
+  },
+  {
+    "id": "heal",
+    "name": "ヒール",
+    "desc": "HPを回復する",
+    "type": "heal",
+    "power": 20,
+    "mp_cost": 6,
+    "range": 0,
+    "element": "light",
+    "color": "#88FF88"
+  },
+  {
+    "id": "poison_gas",
+    "name": "毒霧",
+    "desc": "対象を毒状態にする",
+    "type": "debuff",
+    "power": 0,
+    "mp_cost": 3,
+    "range": 3,
+    "element": "earth",
+    "status": "poison",
+    "duration": 5,
+    "color": "#88AA22"
+  },
+  {
+    "id": "paralyze_touch",
+    "name": "麻痺の一撃",
+    "desc": "対象を麻痺状態にする",
+    "type": "debuff",
+    "power": 5,
+    "mp_cost": 4,
+    "range": 1,
+    "element": "air",
+    "status": "paralyze",
+    "duration": 3,
+    "color": "#FFFF44"
+  },
+  {
+    "id": "war_cry",
+    "name": "雄叫び",
+    "desc": "攻撃力を一時的に上げる",
+    "type": "buff",
+    "power": 0,
+    "mp_cost": 3,
+    "range": 0,
+    "status": "atk_up",
+    "duration": 5,
+    "color": "#FF8844"
+  }
+]

@@ -32,6 +32,7 @@ type InputState struct {
 	Down          bool
 	Left          bool
 	Right         bool
+	Skill         bool
 	Debug         bool
 	DebugFOV      bool
 	DebugGrid     bool

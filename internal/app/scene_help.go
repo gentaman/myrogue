@@ -27,11 +27,13 @@ func (s *HelpScene) Draw(r Renderer) {
 		"WASD / 矢印キー : 移動・攻撃",
 		"X : メニューを開く",
 		"I : アイテム",
+		"Z : スキル",
 		"L : メッセージログ",
 		"M : マップ表示",
 		"H : この画面",
 		"Esc : 戻る / タイトルに戻る",
 		"Enter/Space : 決定",
+		"F1 : デバッグHUD",
 	}
 	for i, line := range lines {
 		r.DrawText(line, 12, panelX+24, panelY+48+i*28, Color{200, 200, 200, 255}, false)

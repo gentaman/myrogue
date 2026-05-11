@@ -5,6 +5,7 @@ import (
 
 	"github.com/gentaman/myrogue/internal/app"
 	"github.com/gentaman/myrogue/internal/core/content"
+	"github.com/gentaman/myrogue/internal/save"
 )
 
 type Game struct {
@@ -13,11 +14,12 @@ type Game struct {
 
 func NewGame() *Game {
 	reg := content.NewRegistry()
-	if err := reg.LoadAll(PlayerJSON, EnemiesJSON, CompanionsJSON, ItemsJSON, FloorsJSON); err != nil {
+	if err := reg.LoadAll(PlayerJSON, EnemiesJSON, CompanionsJSON, ItemsJSON, FloorsJSON, SkillsJSON); err != nil {
 		panic(err)
 	}
 	audio := &Audio{}
-	a := app.NewApp(reg, audio)
+	repo := save.NewLocalStorageRepository("myrogue_")
+	a := app.NewApp(reg, audio, repo)
 	return &Game{app: a}
 }
 

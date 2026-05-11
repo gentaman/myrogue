@@ -18,6 +18,7 @@ import (
 	"github.com/gentaman/myrogue/internal/core/world"
 	"github.com/gentaman/myrogue/internal/debug"
 	"github.com/gentaman/myrogue/internal/mapgen"
+	"github.com/gentaman/myrogue/internal/save"
 )
 
 type PlayState int
@@ -29,18 +30,19 @@ const (
 )
 
 type GameScene struct {
-	Entities    *entity.Manager
-	Positions   *entity.Store[component.Position]
-	Stats       *entity.Store[component.Stats]
-	Factions    *entity.Store[component.FactionComp]
-	AIs         *entity.Store[component.AI]
-	Inventories *entity.Store[component.Inventory]
-	Anims       *entity.Store[component.AnimState]
-	Appearances *entity.Store[component.Appearance]
-	Names       *entity.Store[component.Name]
-	Rewards     *entity.Store[component.Reward]
-	Elements    *entity.Store[component.Element]
-	Races       *entity.Store[component.Race]
+	Entities      *entity.Manager
+	Positions     *entity.Store[component.Position]
+	Stats         *entity.Store[component.Stats]
+	Factions      *entity.Store[component.FactionComp]
+	AIs           *entity.Store[component.AI]
+	Inventories   *entity.Store[component.Inventory]
+	Anims         *entity.Store[component.AnimState]
+	Appearances   *entity.Store[component.Appearance]
+	Names         *entity.Store[component.Name]
+	Rewards       *entity.Store[component.Reward]
+	Elements      *entity.Store[component.Element]
+	Races         *entity.Store[component.Race]
+	StatusEffects *entity.Store[component.StatusEffects]
 
 	Player    entity.ID
 	World     *world.GameMap
@@ -63,9 +65,10 @@ type GameScene struct {
 	StairLeft    []string
 	PendingDir   int
 
-	Audio AudioPlayer
-	Debug *debug.State
-	Clock *clock.ScaledClock
+	Audio       AudioPlayer
+	Debug       *debug.State
+	Clock       *clock.ScaledClock
+	SaveService *save.Service
 }
 
 type MenuItem struct {
@@ -80,28 +83,87 @@ const (
 	menuExamine   = 2
 	menuItem      = 3
 	menuWait      = 4
+	menuSave      = 5
 )
 
-func NewGameScene(reg *content.Registry, audio AudioPlayer) *GameScene {
+func RestoreGameScene(snap *save.Snapshot, reg *content.Registry, audio AudioPlayer, ss *save.Service) *GameScene {
 	g := &GameScene{
-		Entities:    entity.NewManager(),
-		Positions:   entity.NewStore[component.Position](),
-		Stats:       entity.NewStore[component.Stats](),
-		Factions:    entity.NewStore[component.FactionComp](),
-		AIs:         entity.NewStore[component.AI](),
-		Inventories: entity.NewStore[component.Inventory](),
-		Anims:       entity.NewStore[component.AnimState](),
-		Appearances: entity.NewStore[component.Appearance](),
-		Names:       entity.NewStore[component.Name](),
-		Rewards:     entity.NewStore[component.Reward](),
-		Elements:    entity.NewStore[component.Element](),
-		Races:       entity.NewStore[component.Race](),
-		Scheduler:   turn.NewScheduler(),
-		Registry:    reg,
-		AnimQueue:   animation.NewQueue(),
-		Audio:       audio,
-		Debug:       debug.NewState(),
-		Clock:       clock.New(),
+		Entities:      entity.NewManager(),
+		Positions:     entity.NewStore[component.Position](),
+		Stats:         entity.NewStore[component.Stats](),
+		Factions:      entity.NewStore[component.FactionComp](),
+		AIs:           entity.NewStore[component.AI](),
+		Inventories:   entity.NewStore[component.Inventory](),
+		Anims:         entity.NewStore[component.AnimState](),
+		Appearances:   entity.NewStore[component.Appearance](),
+		Names:         entity.NewStore[component.Name](),
+		Rewards:       entity.NewStore[component.Reward](),
+		Elements:      entity.NewStore[component.Element](),
+		Races:         entity.NewStore[component.Race](),
+		StatusEffects: entity.NewStore[component.StatusEffects](),
+		Scheduler:     turn.NewScheduler(),
+		Registry:      reg,
+		AnimQueue:     animation.NewQueue(),
+		Audio:         audio,
+		Debug:         debug.NewState(),
+		Clock:         clock.New(),
+		SaveService:   ss,
+	}
+
+	g.Player = entity.ID(snap.PlayerID)
+	g.Scheduler.TurnCount = snap.TurnCount
+
+	floorDef := reg.GetFloorDef(snap.Floor)
+	g.World = mapgen.Generate(snap.Floor, floorDef, reg, snap.MapSeed)
+
+	for _, es := range snap.Entities {
+		id := entity.ID(es.ID)
+		g.Entities.CreateWithID(id)
+		save.RestoreEntityComponents(es, id,
+			g.Positions, g.Stats, g.Factions, g.AIs, g.Inventories,
+			g.Anims, g.Appearances, g.Names, g.Rewards, g.Elements, g.Races)
+	}
+
+	save.RestoreMapExplored(g.World, snap.Explored)
+	save.RestoreMapItems(g.World, snap.MapItems)
+
+	if len(snap.MessageLog) > 0 {
+		g.MessageLog = snap.MessageLog
+		g.Message = snap.MessageLog[len(snap.MessageLog)-1]
+	}
+
+	g.Resolver = &rules.Resolver{Access: g, PlayerID: g.Player}
+	pPos := g.playerPos()
+	if pPos != nil {
+		world.UpdateVisibility(g.World, pPos.X, pPos.Y)
+	}
+
+	g.pushMessage("ロード完了！")
+	return g
+}
+
+func NewGameScene(reg *content.Registry, audio AudioPlayer, ss *save.Service) *GameScene {
+	g := &GameScene{
+		Entities:      entity.NewManager(),
+		Positions:     entity.NewStore[component.Position](),
+		Stats:         entity.NewStore[component.Stats](),
+		Factions:      entity.NewStore[component.FactionComp](),
+		AIs:           entity.NewStore[component.AI](),
+		Inventories:   entity.NewStore[component.Inventory](),
+		Anims:         entity.NewStore[component.AnimState](),
+		Appearances:   entity.NewStore[component.Appearance](),
+		Names:         entity.NewStore[component.Name](),
+		Rewards:       entity.NewStore[component.Reward](),
+		Elements:      entity.NewStore[component.Element](),
+		Races:         entity.NewStore[component.Race](),
+		StatusEffects: entity.NewStore[component.StatusEffects](),
+		Scheduler:     turn.NewScheduler(),
+		Registry:      reg,
+		AnimQueue:     animation.NewQueue(),
+		Audio:         audio,
+		Debug:         debug.NewState(),
+		Clock:         clock.New(),
+		SaveService:   ss,
 	}
 	g.Resolver = &rules.Resolver{Access: g, PlayerID: entity.ID(1)}
 	g.spawnPlayer(reg)
@@ -275,6 +337,19 @@ func (g *GameScene) pushMessage(msg string) {
 	if len(g.MessageLog) > 1000 {
 		g.MessageLog = g.MessageLog[len(g.MessageLog)-1000:]
 	}
+}
+
+// save.GameAccess implementation
+func (g *GameScene) GetPlayerID() entity.ID     { return g.Player }
+func (g *GameScene) GetFloor() int              { return g.World.Floor }
+func (g *GameScene) GetTurnCount() int          { return g.Scheduler.TurnCount }
+func (g *GameScene) GetMapSeed() int64          { return g.World.Seed }
+func (g *GameScene) GetMessageLog() []string    { return g.MessageLog }
+func (g *GameScene) GetGameMap() *world.GameMap { return g.World }
+func (g *GameScene) AllEntities() []entity.ID   { return g.Entities.All() }
+func (g *GameScene) GetAppearance(id entity.ID) *component.Appearance {
+	a, _ := g.Appearances.Get(id)
+	return a
 }
 
 // WorldAccess implementation for action system
@@ -484,6 +559,23 @@ func (g *GameScene) resolveCombat(attackerID, defenderID entity.ID) {
 	}
 }
 
+func (g *GameScene) buildCombatant(id entity.ID) *combat.Combatant {
+	stats := g.GetStats(id)
+	if stats == nil {
+		return &combat.Combatant{ID: id}
+	}
+	inv := g.GetInventory(id)
+	return &combat.Combatant{
+		ID:      id,
+		Name:    g.GetName(id),
+		Stats:   stats,
+		Element: g.GetElement(id),
+		Race:    g.GetRace(id),
+		PhyAtk:  equippedPhyAtk(inv, g.Registry),
+		PhyDef:  equippedPhyDef(inv, g.Registry),
+	}
+}
+
 func equippedPhyAtk(inv *component.Inventory, reg *content.Registry) int {
 	if inv == nil {
 		return 0
@@ -528,10 +620,10 @@ func (g *GameScene) Update(input InputState) Scene {
 
 	if g.PlayState == StateWin || g.PlayState == StateDead {
 		if input.Restart {
-			return NewGameScene(g.Registry, g.Audio)
+			return NewGameScene(g.Registry, g.Audio, g.SaveService)
 		}
 		if input.Cancel {
-			return NewTitleSceneWithDeps(g.Registry, g.Audio)
+			return NewTitleSceneWithDeps(g.Registry, g.Audio, g.SaveService)
 		}
 		return nil
 	}
@@ -540,7 +632,7 @@ func (g *GameScene) Update(input InputState) Scene {
 		if input.Cancel || input.No {
 			g.ConfirmQuit = false
 		} else if input.Confirm || input.Yes {
-			return NewTitleSceneWithDeps(g.Registry, g.Audio)
+			return NewTitleSceneWithDeps(g.Registry, g.Audio, g.SaveService)
 		}
 		return nil
 	}
@@ -578,6 +670,9 @@ func (g *GameScene) updatePlayerTurn(input InputState) Scene {
 	}
 	if input.MapView {
 		return &MapViewScene{game: g}
+	}
+	if input.Skill && len(g.Registry.Skills) > 0 {
+		return NewSkillScene(g)
 	}
 
 	if input.Cancel {
@@ -842,8 +937,8 @@ func (g *GameScene) updateCompanionTurns() {
 func (g *GameScene) updateEnemyTurns() {
 	enemies := g.EntitiesWithFaction(component.FactionEnemy)
 	if g.Scheduler.ActiveIdx >= len(enemies) {
+		g.tickStatusEffects()
 		g.Scheduler.StartPlayerPhase()
-		// MP regen
 		stats := g.GetStats(g.Player)
 		if stats != nil && stats.MP < stats.MaxMP {
 			stats.MP++
@@ -933,6 +1028,7 @@ func (g *GameScene) buildMenu() {
 	inv := g.GetInventory(g.Player)
 	hasItems := inv != nil && len(inv.Items) > 0
 	g.MenuItems = append(g.MenuItems, MenuItem{Label: "道具を使う", Enabled: hasItems, Kind: menuItem})
+	g.MenuItems = append(g.MenuItems, MenuItem{Label: "セーブ", Enabled: g.SaveService != nil, Kind: menuSave})
 	g.MenuItems = append(g.MenuItems, MenuItem{Label: "その場で待機", Enabled: true, Kind: menuWait})
 }
 
@@ -981,6 +1077,14 @@ func (g *GameScene) execMenuItem() Scene {
 		g.Scheduler.StartCompanionPhase()
 	case menuItem:
 		return &InventoryScene{game: g}
+	case menuSave:
+		if g.SaveService != nil {
+			if err := g.SaveService.Save("slot1", g); err != nil {
+				g.pushMessage("セーブに失敗した...")
+			} else {
+				g.pushMessage("セーブ完了！")
+			}
+		}
 	}
 	return nil
 }
@@ -1258,6 +1362,16 @@ func (g *GameScene) drawUI(r Renderer) {
 		def := equippedPhyDef(g.GetInventory(g.Player), g.Registry) + stats.Vit
 		r.DrawText(fmt.Sprintf("ATK: %d  DEF: %d", atk, def), 12, 160, statusY+16, Color{200, 200, 200, 255}, false)
 		r.DrawText(fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", stats.Str, stats.Wis, stats.Fai, stats.Vit, stats.Agi, stats.Luk), 12, 8, statusY+32, Color{150, 150, 150, 255}, false)
+	}
+	if se, ok := g.StatusEffects.Get(g.Player); ok && len(se.Effects) > 0 {
+		statusStr := ""
+		for i, eff := range se.Effects {
+			if i > 0 {
+				statusStr += " "
+			}
+			statusStr += fmt.Sprintf("[%s:%d]", component.StatusNames[eff.Type], eff.Duration)
+		}
+		r.DrawText(statusStr, 11, 340, statusY+16, Color{255, 200, 100, 255}, false)
 	}
 	r.DrawText(g.Message, 14, 8, statusY+48, Color{255, 255, 255, 255}, false)
 	r.DrawText("H: ヘルプ", 12, ScreenWidth-80, statusY, Color{100, 100, 100, 255}, false)

@@ -48,6 +48,9 @@ var ItemsJSON []byte
 //go:embed data/floors.json
 var FloorsJSON []byte
 
+//go:embed data/skills.json
+var SkillsJSON []byte
+
 var (
 	fontFaceSource *text.GoTextFaceSource
 	fontFace12     *text.GoTextFace
