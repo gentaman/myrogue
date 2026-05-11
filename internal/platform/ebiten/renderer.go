@@ -1,6 +1,7 @@
 package ebiten
 
 import (
+	"image"
 	"image/color"
 	"strconv"
 
@@ -31,7 +32,19 @@ func (r *EbitenRenderer) DrawRect(x, y, w, h int, clr app.Color) {
 }
 
 func (r *EbitenRenderer) DrawSprite(name string, frame, dir int, x, y float64) {
-	// TODO: sprite drawing
+	img, ok := spriteImages[name]
+	if !ok {
+		return
+	}
+	// Sprite sheet layout: columns = direction (down=0, up=1, right=2, left=3), rows = frame
+	const spriteSize = 32
+	sx := dir * spriteSize
+	sy := frame * spriteSize
+	rect := image.Rect(sx, sy, sx+spriteSize, sy+spriteSize)
+	sub := img.SubImage(rect).(*ebt.Image)
+	op := &ebt.DrawImageOptions{}
+	op.GeoM.Translate(x, y)
+	r.screen.DrawImage(sub, op)
 }
 
 func (r *EbitenRenderer) DrawText(str string, size int, x, y int, clr app.Color, center bool) {

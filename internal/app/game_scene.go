@@ -555,6 +555,19 @@ func (g *GameScene) Update(input InputState) Scene {
 }
 
 func (g *GameScene) updatePlayerTurn(input InputState) Scene {
+	if input.Help {
+		return &HelpScene{game: g}
+	}
+	if input.Inventory {
+		return &InventoryScene{game: g}
+	}
+	if input.Log {
+		return &LogScene{game: g}
+	}
+	if input.MapView {
+		return &MapViewScene{game: g}
+	}
+
 	if input.Cancel {
 		if g.MenuOpen {
 			g.MenuOpen = false
@@ -914,27 +927,44 @@ func (g *GameScene) drawWorld(r Renderer) {
 		}
 		ox, oy := g.charAnimOffset(attackAnim, pos.Dir)
 
-		var clr Color
-		switch fc.Faction {
-		case component.FactionPlayer:
-			clr = Color{255, 255, 255, 255}
-		case component.FactionAlly:
-			clr = Color{100, 200, 100, 255}
-		case component.FactionEnemy:
-			clr = Color{200, 80, 80, 255}
-		}
-
-		app := g.Appearances
-		if app != nil {
-			a, ok := app.Get(id)
-			if ok && a.ColorHex != "" {
-				clr = hexToColor(a.ColorHex)
+		// Check for sprite
+		appearance, hasApp := g.Appearances.Get(id)
+		if hasApp && appearance.HasSprite {
+			// Sprite sheet: dir mapping (Down=0, Up=1, Right=2, Left=3)
+			dirIdx := 0
+			switch pos.Dir {
+			case component.DirDown:
+				dirIdx = 0
+			case component.DirUp:
+				dirIdx = 1
+			case component.DirRight:
+				dirIdx = 2
+			case component.DirLeft:
+				dirIdx = 3
 			}
-		}
+			frame := (g.Frame / 10) % 3
+			sx := float64(pos.X*TileSize+ox*2) - camX
+			sy := float64(pos.Y*TileSize+oy*2) - camY
+			r.DrawSprite(appearance.DefID, frame, dirIdx, sx, sy)
+		} else {
+			var clr Color
+			switch fc.Faction {
+			case component.FactionPlayer:
+				clr = Color{255, 255, 255, 255}
+			case component.FactionAlly:
+				clr = Color{100, 200, 100, 255}
+			case component.FactionEnemy:
+				clr = Color{200, 80, 80, 255}
+			}
 
-		sx := float64(pos.X*TileSize+ox*2) - camX
-		sy := float64(pos.Y*TileSize+oy*2) - camY
-		r.DrawRect(int(sx), int(sy), TileSize-1, TileSize-1, clr)
+			if hasApp && appearance.ColorHex != "" {
+				clr = hexToColor(appearance.ColorHex)
+			}
+
+			sx := float64(pos.X*TileSize+ox*2) - camX
+			sy := float64(pos.Y*TileSize+oy*2) - camY
+			r.DrawRect(int(sx), int(sy), TileSize-1, TileSize-1, clr)
+		}
 
 		// Direction dot
 		var dotClr Color
@@ -1136,6 +1166,91 @@ func (g *GameScene) drawOverlays(r Renderer) {
 		r.DrawText(sub, 12, ScreenWidth/2, dY+55, Color{220, 220, 220, 255}, true)
 		r.DrawText("R: 再挑戦    Esc: タイトルへ", 12, ScreenWidth/2, dY+dH-25, Color{180, 180, 180, 255}, true)
 	}
+}
+
+func (g *GameScene) useInventoryItem(idx int) bool {
+	inv := g.GetInventory(g.Player)
+	if inv == nil || idx < 0 || idx >= len(inv.Items) {
+		return false
+	}
+	entry := &inv.Items[idx]
+	def, ok := g.Registry.GetItemDef(entry.DefID)
+	if !ok {
+		return false
+	}
+
+	if def.EquipSlot != component.SlotNone {
+		entry.Equipped = !entry.Equipped
+		if entry.Equipped {
+			// unequip others in same slot
+			for i := range inv.Items {
+				if i != idx && inv.Items[i].Equipped {
+					otherDef, ok2 := g.Registry.GetItemDef(inv.Items[i].DefID)
+					if ok2 && otherDef.EquipSlot == def.EquipSlot {
+						inv.Items[i].Equipped = false
+					}
+				}
+			}
+			g.pushMessage(def.Name + "を装備した。")
+		} else {
+			g.pushMessage(def.Name + "を外した。")
+		}
+		return true
+	}
+
+	if def.Effect != nil {
+		switch def.Effect.Type {
+		case "heal":
+			stats := g.GetStats(g.Player)
+			if stats != nil {
+				stats.HP += def.Effect.Amount
+				if stats.HP > stats.MaxHP {
+					stats.HP = stats.MaxHP
+				}
+			}
+			g.pushMessage(fmt.Sprintf("%sを使った。HPが%d回復した。", def.Name, def.Effect.Amount))
+		case "mp_heal":
+			stats := g.GetStats(g.Player)
+			if stats != nil {
+				stats.MP += def.Effect.Amount
+				if stats.MP > stats.MaxMP {
+					stats.MP = stats.MaxMP
+				}
+			}
+			g.pushMessage(fmt.Sprintf("%sを使った。MPが%d回復した。", def.Name, def.Effect.Amount))
+		default:
+			g.pushMessage(def.Name + "を使った。")
+		}
+	} else {
+		g.pushMessage(def.Name + "を使った。")
+	}
+
+	entry.Count--
+	if entry.Count <= 0 {
+		inv.Items = append(inv.Items[:idx], inv.Items[idx+1:]...)
+	}
+	return true
+}
+
+func (g *GameScene) dropInventoryItem(idx int) {
+	inv := g.GetInventory(g.Player)
+	if inv == nil || idx < 0 || idx >= len(inv.Items) {
+		return
+	}
+	entry := inv.Items[idx]
+	if entry.Equipped {
+		entry.Equipped = false
+	}
+	pPos := g.playerPos()
+	g.World.Items = append(g.World.Items, world.MapItem{
+		X: pPos.X, Y: pPos.Y,
+		Inventory: []component.ItemEntry{entry},
+	})
+	def, ok := g.Registry.GetItemDef(entry.DefID)
+	if ok {
+		g.pushMessage(def.Name + "を捨てた。")
+	}
+	inv.Items = append(inv.Items[:idx], inv.Items[idx+1:]...)
 }
 
 func hexToColor(hex string) Color {

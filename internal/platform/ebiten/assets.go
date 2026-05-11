@@ -3,9 +3,13 @@ package ebiten
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
+	"image"
+	_ "image/png"
 	"io"
 	"log"
 
+	ebt "github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -13,6 +17,9 @@ import (
 
 //go:embed data/fonts/mplus1.ttf
 var fontData []byte
+
+//go:embed data/images/player.png
+var playerPNG []byte
 
 //go:embed data/sfx/Hit-1.wav
 var sfxHitData []byte
@@ -54,9 +61,21 @@ var (
 	sfxStairUpPCM   []byte
 	sfxCoinPCM      []byte
 	sfxVolume       float64 = 0.5
+
+	spriteImages map[string]*ebt.Image
 )
 
 func init() {
+	spriteImages = make(map[string]*ebt.Image)
+	loadSprite := func(name string, data []byte) {
+		img, _, err := image.Decode(bytes.NewReader(data))
+		if err != nil {
+			log.Fatal(fmt.Sprintf("failed to decode sprite %s: %v", name, err))
+		}
+		spriteImages[name] = ebt.NewImageFromImage(img)
+	}
+	loadSprite("player", playerPNG)
+
 	var err error
 	fontFaceSource, err = text.NewGoTextFaceSource(bytes.NewReader(fontData))
 	if err != nil {
