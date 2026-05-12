@@ -32,3 +32,5 @@ go.work.sum
 # .vscode/
 
 ignore__*
+
+*.md
