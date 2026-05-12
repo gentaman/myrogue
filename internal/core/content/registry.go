@@ -3,6 +3,7 @@ package content
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/gentaman/myrogue/internal/core/component"
 )
@@ -72,6 +73,68 @@ func (r *Registry) LoadAll(players, enemies, companions, items, floors, raceBonu
 		r.MaxCarryWeight = r.Players[0].MaxCarryWeight
 		r.PlayerTemplate = r.Players[0] // テンプレートとして保存
 	}
+
+	if err := r.Validate(); err != nil {
+		return fmt.Errorf("registry validation failed: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Registry) Validate() error {
+	var errs []string
+
+	// Actors
+	validateActor := func(category string, actors []ActorDef) {
+		for _, a := range actors {
+			if a.ID == "" {
+				errs = append(errs, fmt.Sprintf("%s: empty ID", category))
+			}
+			if a.HP <= 0 {
+				errs = append(errs, fmt.Sprintf("%s %s: HP must be positive", category, a.ID))
+			}
+		}
+	}
+	validateActor("player", r.Players)
+	validateActor("enemy", r.Enemies)
+	validateActor("companion", r.Companions)
+
+	// Items
+	for _, it := range r.Items {
+		if it.ID == "" {
+			errs = append(errs, "item: empty ID")
+		}
+	}
+
+	// Skills
+	for _, sk := range r.Skills {
+		if sk.ID == "" {
+			errs = append(errs, "skill: empty ID")
+		}
+	}
+
+	// Floors
+	for _, f := range r.Floors {
+		for _, e := range f.EnemyPool {
+			if _, ok := r.EnemyIDMap[e.ID]; !ok {
+				errs = append(errs, fmt.Sprintf("floor %d: enemy pool contains unknown ID %s", f.Floor, e.ID))
+			}
+		}
+		for _, i := range f.ItemPool {
+			if _, ok := r.ItemIDMap[i.ID]; !ok {
+				errs = append(errs, fmt.Sprintf("floor %d: item pool contains unknown ID %s", f.Floor, i.ID))
+			}
+		}
+		for _, ci := range f.ConditionalItems {
+			if _, ok := r.ItemIDMap[ci.ID]; !ok {
+				errs = append(errs, fmt.Sprintf("floor %d: conditional items contains unknown ID %s", f.Floor, ci.ID))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("\n- %s", strings.Join(errs, "\n- "))
+	}
 	return nil
 }
 
@@ -83,6 +146,9 @@ func loadActors(data []byte) ([]ActorDef, map[string]int, error) {
 	defs := make([]ActorDef, len(raws))
 	idMap := make(map[string]int)
 	for i, raw := range raws {
+		if _, exists := idMap[raw.ID]; exists {
+			return nil, nil, fmt.Errorf("duplicate ID: %s", raw.ID)
+		}
 		idMap[raw.ID] = i
 		defs[i] = ActorDef{
 			ID:                raw.ID,
@@ -118,6 +184,9 @@ func loadItems(data []byte) ([]ItemDef, map[string]int, error) {
 	defs := make([]ItemDef, len(raws))
 	idMap := make(map[string]int)
 	for i, raw := range raws {
+		if _, exists := idMap[raw.ID]; exists {
+			return nil, nil, fmt.Errorf("duplicate ID: %s", raw.ID)
+		}
 		idMap[raw.ID] = i
 		var slot component.EquipSlot
 		var atk, def int
@@ -211,6 +280,9 @@ func loadSkills(data []byte) ([]SkillDef, map[string]int, error) {
 	defs := make([]SkillDef, len(raws))
 	idMap := make(map[string]int)
 	for i, raw := range raws {
+		if _, exists := idMap[raw.ID]; exists {
+			return nil, nil, fmt.Errorf("duplicate ID: %s", raw.ID)
+		}
 		idMap[raw.ID] = i
 		defs[i] = SkillDef{
 			ID:       raw.ID,

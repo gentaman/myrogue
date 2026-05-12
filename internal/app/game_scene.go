@@ -9,10 +9,10 @@ import (
 	"github.com/gentaman/myrogue/internal/clock"
 	"github.com/gentaman/myrogue/internal/core/action"
 	"github.com/gentaman/myrogue/internal/core/ai"
-	"github.com/gentaman/myrogue/internal/core/combat"
 	"github.com/gentaman/myrogue/internal/core/component"
 	"github.com/gentaman/myrogue/internal/core/content"
 	"github.com/gentaman/myrogue/internal/core/entity"
+	"github.com/gentaman/myrogue/internal/core/event"
 	"github.com/gentaman/myrogue/internal/core/rules"
 	"github.com/gentaman/myrogue/internal/core/turn"
 	"github.com/gentaman/myrogue/internal/core/world"
@@ -47,9 +47,10 @@ type GameScene struct {
 	Player    entity.ID
 	World     *world.GameMap
 	Scheduler *turn.Scheduler
-	Registry  *content.Registry
-	Resolver  *rules.Resolver
-	AnimQueue *animation.Queue
+	registry  *content.Registry `json:"-"`
+	Resolver  *rules.Resolver   `json:"-"`
+	AnimQueue *animation.Queue  `json:"-"`
+	rng       rules.RNG
 
 	PlayState  PlayState
 	MessageLog []string
@@ -102,8 +103,9 @@ func RestoreGameScene(snap *save.Snapshot, reg *content.Registry, audio AudioPla
 		Races:         entity.NewStore[component.Race](),
 		StatusEffects: entity.NewStore[component.StatusEffects](),
 		Scheduler:     turn.NewScheduler(),
-		Registry:      reg,
+		registry:      reg,
 		AnimQueue:     animation.NewQueue(),
+		rng:           rules.NewRNG(snap.MapSeed),
 		Audio:         audio,
 		Debug:         debug.NewState(),
 		Clock:         clock.New(),
@@ -132,7 +134,7 @@ func RestoreGameScene(snap *save.Snapshot, reg *content.Registry, audio AudioPla
 		g.Message = snap.MessageLog[len(snap.MessageLog)-1]
 	}
 
-	g.Resolver = &rules.Resolver{Access: g, PlayerID: g.Player}
+	g.Resolver = &rules.Resolver{Access: g, PlayerID: g.Player, RNG: g.rng}
 	pPos := g.playerPos()
 	if pPos != nil {
 		world.UpdateVisibility(g.World, pPos.X, pPos.Y)
@@ -143,6 +145,7 @@ func RestoreGameScene(snap *save.Snapshot, reg *content.Registry, audio AudioPla
 }
 
 func NewGameScene(reg *content.Registry, audio AudioPlayer, ss *save.Service) *GameScene {
+	seed := time.Now().UnixNano()
 	g := &GameScene{
 		Entities:      entity.NewManager(),
 		Positions:     entity.NewStore[component.Position](),
@@ -158,14 +161,15 @@ func NewGameScene(reg *content.Registry, audio AudioPlayer, ss *save.Service) *G
 		Races:         entity.NewStore[component.Race](),
 		StatusEffects: entity.NewStore[component.StatusEffects](),
 		Scheduler:     turn.NewScheduler(),
-		Registry:      reg,
+		registry:      reg,
 		AnimQueue:     animation.NewQueue(),
+		rng:           rules.NewRNG(seed),
 		Audio:         audio,
 		Debug:         debug.NewState(),
 		Clock:         clock.New(),
 		SaveService:   ss,
 	}
-	g.Resolver = &rules.Resolver{Access: g, PlayerID: entity.ID(1)}
+	g.Resolver = &rules.Resolver{Access: g, PlayerID: entity.ID(1), RNG: g.rng}
 	g.spawnPlayer(reg)
 	g.generateFloor(0)
 	return g
@@ -198,9 +202,9 @@ func (g *GameScene) spawnPlayer(reg *content.Registry) {
 }
 
 func (g *GameScene) generateFloor(floor int) {
-	floorDef := g.Registry.GetFloorDef(floor)
+	floorDef := g.registry.GetFloorDef(floor)
 	seed := time.Now().UnixNano()
-	g.World = mapgen.Generate(floor, floorDef, g.Registry, seed, g)
+	g.World = mapgen.Generate(floor, floorDef, g.registry, seed, g)
 
 	if len(g.World.Rooms) > 0 {
 		r := g.World.Rooms[0]
@@ -210,14 +214,14 @@ func (g *GameScene) generateFloor(floor int) {
 	}
 
 	g.spawnInitialEnemies()
-	if g.Registry.SelectedCompanion != "" {
-		g.spawnCompanion(g.Registry.SelectedCompanion)
+	if g.registry.SelectedCompanion != "" {
+		g.spawnCompanion(g.registry.SelectedCompanion)
 	}
 	world.UpdateVisibility(g.World, g.playerPos().X, g.playerPos().Y)
 }
 
 func (g *GameScene) spawnInitialEnemies() {
-	floorDef := g.Registry.GetFloorDef(g.World.Floor)
+	floorDef := g.registry.GetFloorDef(g.World.Floor)
 	playerRoom := g.World.RoomOf(g.playerPos().X, g.playerPos().Y)
 	count := len(g.World.Rooms) / 2
 	for i := 0; i < count; i++ {
@@ -249,7 +253,7 @@ func (g *GameScene) trySpawnEnemy(floorDef *content.FloorDef, playerRoom int) {
 			return
 		}
 		defID := floorDef.EnemyPool[poolIdx].ID
-		def, ok := g.Registry.GetEnemyDef(defID)
+		def, ok := g.registry.GetEnemyDef(defID)
 		if !ok {
 			return
 		}
@@ -288,7 +292,7 @@ func (g *GameScene) spawnEnemyAt(def *content.ActorDef, x, y int) entity.ID {
 }
 
 func (g *GameScene) spawnCompanion(defID string) {
-	def, ok := g.Registry.GetCompanionDef(defID)
+	def, ok := g.registry.GetCompanionDef(defID)
 	if !ok {
 		return
 	}
@@ -502,16 +506,16 @@ func (g *GameScene) isItemPossessed(itemID string) bool {
 	return false
 }
 
-func (g *GameScene) processEvents(events []action.Event) {
+func (g *GameScene) processEvents(events []event.Event) {
 	for _, ev := range events {
 		switch e := ev.(type) {
-		case action.EventLog:
+		case event.EventLog:
 			g.pushMessage(e.Text)
-		case action.EventSFX:
+		case event.EventSFX:
 			if g.Audio != nil {
 				g.Audio.PlaySFX(e.ID)
 			}
-		case action.EventDeath:
+		case event.EventDeath:
 			if e.Entity == g.Player {
 				g.PlayState = StateDead
 				g.pushMessage("あなたは力尽きた...")
@@ -525,24 +529,24 @@ func (g *GameScene) processEvents(events []action.Event) {
 				cascaded := g.Resolver.ProcessDeath(e)
 				g.processEvents(cascaded)
 			}
-		case action.EventXP:
+		case event.EventXP:
 			cascaded := g.Resolver.ProcessXP(e)
 			if e.Entity == g.Player {
 				g.pushMessage(fmt.Sprintf("%d の経験値を獲得！", e.Amount))
 			}
 			g.processEvents(cascaded)
-		case action.EventLevelUp:
+		case event.EventLevelUp:
 			if e.Entity == g.Player {
 				g.pushMessage(fmt.Sprintf("レベル %d に上がった！", e.NewLevel))
 			}
-		case action.EventAttack:
+		case event.EventAttack:
 			anim, _ := g.Anims.Get(e.Defender)
 			if anim != nil {
 				anim.DamageAnim = component.DamageAnimFrames
 			}
-		case action.EventDrop:
+		case event.EventDrop:
 			g.World.Items = append(g.World.Items, world.MapItem{X: e.X, Y: e.Y, Inventory: e.Items})
-		case action.EventProjectile:
+		case event.EventProjectile:
 			g.AnimQueue.Add(animation.Projectile{
 				StartX: e.StartX, StartY: e.StartY,
 				EndX: e.EndX, EndY: e.EndY,
@@ -550,67 +554,14 @@ func (g *GameScene) processEvents(events []action.Event) {
 				ColorHex:    e.ColorHex,
 				IsFlash:     e.IsFlash,
 			})
+		case event.EventFloorChange:
+			g.doChangeFloor(e.Direction)
 		}
 	}
 }
 
-func (g *GameScene) resolveCombat(attackerID, defenderID entity.ID) {
-	atkStats := g.GetStats(attackerID)
-	defStats := g.GetStats(defenderID)
-	if atkStats == nil || defStats == nil {
-		return
-	}
-
-	atkInv := g.GetInventory(attackerID)
-	defInv := g.GetInventory(defenderID)
-
-	atk := &combat.Combatant{
-		ID:      attackerID,
-		Name:    g.GetName(attackerID),
-		Stats:   atkStats,
-		Element: g.GetElement(attackerID),
-		Race:    g.GetRace(attackerID),
-		PhyAtk:  equippedPhyAtk(atkInv, g.Registry),
-		PhyDef:  equippedPhyDef(atkInv, g.Registry),
-	}
-	def2 := &combat.Combatant{
-		ID:      defenderID,
-		Name:    g.GetName(defenderID),
-		Stats:   defStats,
-		Element: g.GetElement(defenderID),
-		Race:    g.GetRace(defenderID),
-		PhyAtk:  equippedPhyAtk(defInv, g.Registry),
-		PhyDef:  equippedPhyDef(defInv, g.Registry),
-	}
-
-	events := combat.ResolveCombat(atk, def2, combat.CombatTypePhysical, 0, atk.Element, g.Player)
-	g.processEvents(events)
-
-	// XP on kill
-	if defStats.HP <= 0 && attackerID != defenderID {
-		xp := g.GetRewardXP(defenderID)
-		if xp > 0 {
-			g.processEvents([]action.Event{action.EventXP{Entity: attackerID, Amount: xp}})
-		}
-	}
-}
-
-func (g *GameScene) buildCombatant(id entity.ID) *combat.Combatant {
-	stats := g.GetStats(id)
-	if stats == nil {
-		return &combat.Combatant{ID: id}
-	}
-	inv := g.GetInventory(id)
-	return &combat.Combatant{
-		ID:      id,
-		Name:    g.GetName(id),
-		Stats:   stats,
-		Element: g.GetElement(id),
-		Race:    g.GetRace(id),
-		PhyAtk:  equippedPhyAtk(inv, g.Registry),
-		PhyDef:  equippedPhyDef(inv, g.Registry),
-	}
-}
+func (g *GameScene) RNG() rules.RNG              { return g.rng }
+func (g *GameScene) Registry() *content.Registry { return g.registry }
 
 func equippedPhyAtk(inv *component.Inventory, reg *content.Registry) int {
 	if inv == nil {
@@ -644,6 +595,17 @@ func equippedPhyDef(inv *component.Inventory, reg *content.Registry) int {
 	return d
 }
 
+func (g *GameScene) resolveCombat(attackerID, defenderID entity.ID) {
+	atkPos := g.GetPosition(attackerID)
+	defPos := g.GetPosition(defenderID)
+	if atkPos == nil || defPos == nil {
+		return
+	}
+	act := &action.AttackAction{TargetX: defPos.X, TargetY: defPos.Y}
+	events := act.Execute(attackerID, g)
+	g.processEvents(events)
+}
+
 func (g *GameScene) Update(input InputState) Scene {
 	g.Frame++
 	g.handleDebugInput(input)
@@ -656,10 +618,10 @@ func (g *GameScene) Update(input InputState) Scene {
 
 	if g.PlayState == StateWin || g.PlayState == StateDead {
 		if input.Restart {
-			return NewGameScene(g.Registry, g.Audio, g.SaveService)
+			return NewGameScene(g.registry, g.Audio, g.SaveService)
 		}
 		if input.Cancel {
-			return NewTitleSceneWithDeps(g.Registry, g.Audio, g.SaveService)
+			return NewTitleSceneWithDeps(g.registry, g.Audio, g.SaveService)
 		}
 		return nil
 	}
@@ -668,7 +630,7 @@ func (g *GameScene) Update(input InputState) Scene {
 		if input.Cancel || input.No {
 			g.ConfirmQuit = false
 		} else if input.Confirm || input.Yes {
-			return NewTitleSceneWithDeps(g.Registry, g.Audio, g.SaveService)
+			return NewTitleSceneWithDeps(g.registry, g.Audio, g.SaveService)
 		}
 		return nil
 	}
@@ -678,7 +640,8 @@ func (g *GameScene) Update(input InputState) Scene {
 			g.ConfirmStair = false
 		} else if input.Confirm || input.Yes {
 			g.ConfirmStair = false
-			g.doChangeFloor(g.PendingDir)
+			act := &action.FloorChangeAction{Direction: g.PendingDir}
+			g.processEvents(act.Execute(g.Player, g))
 		}
 		return nil
 	}
@@ -707,7 +670,7 @@ func (g *GameScene) updatePlayerTurn(input InputState) Scene {
 	if input.MapView {
 		return &MapViewScene{game: g}
 	}
-	if input.Skill && len(g.Registry.Skills) > 0 {
+	if input.Skill && len(g.registry.Skills) > 0 {
 		return NewSkillScene(g)
 	}
 
@@ -836,7 +799,8 @@ func (g *GameScene) tryChangeFloor(direction int) {
 		g.StairLeft = leftBehind
 		g.PendingDir = direction
 	} else {
-		g.doChangeFloor(direction)
+		act := &action.FloorChangeAction{Direction: direction}
+		g.processEvents(act.Execute(g.Player, g))
 	}
 }
 
@@ -865,9 +829,9 @@ func (g *GameScene) doChangeFloor(direction int) {
 	}
 
 	// Generate new floor
-	floorDef := g.Registry.GetFloorDef(nextFloor)
+	floorDef := g.registry.GetFloorDef(nextFloor)
 	seed := time.Now().UnixNano()
-	g.World = mapgen.Generate(nextFloor, floorDef, g.Registry, seed, g)
+	g.World = mapgen.Generate(nextFloor, floorDef, g.registry, seed, g)
 
 	// Remove old non-player entities
 	g.Positions.Each(func(id entity.ID, pos *component.Position) {
@@ -918,7 +882,7 @@ func (g *GameScene) hasTreasure() bool {
 		return false
 	}
 	for _, entry := range inv.Items {
-		def, ok := g.Registry.GetItemDef(entry.DefID)
+		def, ok := g.registry.GetItemDef(entry.DefID)
 		if ok && def.FloorBound {
 			return true
 		}
@@ -935,7 +899,7 @@ func (g *GameScene) calcScore() int {
 	if base < 0 {
 		base = 0
 	}
-	return base * g.Registry.FloorCount()
+	return base * g.registry.FloorCount()
 }
 
 func abs(x int) int {
@@ -998,15 +962,8 @@ func (g *GameScene) runAI(id entity.ID, brain ai.Brain) {
 		events := a.Execute(id, g)
 		g.processEvents(events)
 	case *action.AttackAction:
-		pos.Dir = component.DirFromDelta(a.TargetX-pos.X, a.TargetY-pos.Y)
-		anim, _ := g.Anims.Get(id)
-		if anim != nil {
-			anim.AttackAnim = component.AttackAnimFrames
-		}
-		target := g.UnitAt(a.TargetX, a.TargetY)
-		if target != entity.InvalidID {
-			g.resolveCombat(id, target)
-		}
+		events := a.Execute(id, g)
+		g.processEvents(events)
 	case *action.WaitAction:
 		// do nothing
 	}
@@ -1409,8 +1366,8 @@ func (g *GameScene) drawUI(r Renderer) {
 	if stats != nil {
 		r.DrawText(fmt.Sprintf("Lv: %d  XP: %d / %d", stats.Level, stats.XP, stats.XPToNext), 12, 160, statusY, Color{200, 200, 200, 255}, false)
 		r.DrawText(fmt.Sprintf("HP: %d / %d  MP: %d / %d", stats.HP, stats.MaxHP, stats.MP, stats.MaxMP), 12, 8, statusY+16, hpClr, false)
-		atk := 1 + stats.Str + equippedPhyAtk(g.GetInventory(g.Player), g.Registry)
-		def := equippedPhyDef(g.GetInventory(g.Player), g.Registry) + stats.Vit
+		atk := 1 + stats.Str + equippedPhyAtk(g.GetInventory(g.Player), g.registry)
+		def := equippedPhyDef(g.GetInventory(g.Player), g.registry) + stats.Vit
 		r.DrawText(fmt.Sprintf("ATK: %d  DEF: %d", atk, def), 12, 160, statusY+16, Color{200, 200, 200, 255}, false)
 		r.DrawText(fmt.Sprintf("Str:%d Wis:%d Fai:%d Vit:%d Agi:%d Luk:%d", stats.Str, stats.Wis, stats.Fai, stats.Vit, stats.Agi, stats.Luk), 12, 8, statusY+32, Color{150, 150, 150, 255}, false)
 	}
@@ -1548,7 +1505,7 @@ func (g *GameScene) useInventoryItem(idx int) bool {
 		return false
 	}
 	entry := &inv.Items[idx]
-	def, ok := g.Registry.GetItemDef(entry.DefID)
+	def, ok := g.registry.GetItemDef(entry.DefID)
 	if !ok {
 		return false
 	}
@@ -1559,7 +1516,7 @@ func (g *GameScene) useInventoryItem(idx int) bool {
 			// unequip others in same slot
 			for i := range inv.Items {
 				if i != idx && inv.Items[i].Equipped {
-					otherDef, ok2 := g.Registry.GetItemDef(inv.Items[i].DefID)
+					otherDef, ok2 := g.registry.GetItemDef(inv.Items[i].DefID)
 					if ok2 && otherDef.EquipSlot == def.EquipSlot {
 						inv.Items[i].Equipped = false
 					}
@@ -1620,7 +1577,7 @@ func (g *GameScene) dropInventoryItem(idx int) {
 		X: pPos.X, Y: pPos.Y,
 		Inventory: []component.ItemEntry{entry},
 	})
-	def, ok := g.Registry.GetItemDef(entry.DefID)
+	def, ok := g.registry.GetItemDef(entry.DefID)
 	if ok {
 		g.pushMessage(def.Name + "を捨てた。")
 	}

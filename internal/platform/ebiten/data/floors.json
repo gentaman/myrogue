@@ -79,7 +79,7 @@
     "enemy_pool": [
       { "id": "goblin", "weight": 20 },
       { "id": "orc", "weight": 70 },
-      { "id": "dragon", "weight": 10 }
+      { "id": "red_dragon", "weight": 10 }
     ],
     "item_pool": [
       { "id": "heal_large", "weight": 30 },

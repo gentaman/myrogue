@@ -166,7 +166,7 @@ func (s *InventoryScene) Draw(r Renderer) {
 
 	panelW := minW
 	for _, entry := range inv.Items {
-		def, ok := s.game.Registry.GetItemDef(entry.DefID)
+		def, ok := s.game.registry.GetItemDef(entry.DefID)
 		if !ok {
 			continue
 		}
@@ -207,7 +207,7 @@ func (s *InventoryScene) Draw(r Renderer) {
 				continue
 			}
 			y := panelY + headerH + row*rowH
-			def, ok := s.game.Registry.GetItemDef(entry.DefID)
+			def, ok := s.game.registry.GetItemDef(entry.DefID)
 			clr := Color{200, 200, 200, 255}
 			if i == s.cursor {
 				r.DrawRect(panelX+4, y-4, panelW-8, 26, Color{40, 80, 50, 255})
@@ -289,7 +289,7 @@ func (s *InventoryScene) drawDescWindow(r Renderer, panelX, panelY, panelW, pane
 		return
 	}
 	entry := inv.Items[s.cursor]
-	def, ok := s.game.Registry.GetItemDef(entry.DefID)
+	def, ok := s.game.registry.GetItemDef(entry.DefID)
 	if !ok {
 		return
 	}

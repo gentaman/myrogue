@@ -56,7 +56,7 @@ func (s *ChestScene) Update(input InputState) Scene {
 			// Chest -> Player
 			if len(chest.Inventory) > 0 && s.leftCursor < len(chest.Inventory) {
 				entry := chest.Inventory[s.leftCursor]
-				def, ok := s.game.Registry.GetItemDef(entry.DefID)
+				def, ok := s.game.registry.GetItemDef(entry.DefID)
 				weight := 0
 				if ok {
 					weight = def.Weight
@@ -134,7 +134,7 @@ func (s *ChestScene) Draw(r Renderer) {
 			clr = Color{255, 255, 255, 255}
 		}
 		name := entry.DefID
-		if def, ok := s.game.Registry.GetItemDef(entry.DefID); ok {
+		if def, ok := s.game.registry.GetItemDef(entry.DefID); ok {
 			name = def.Name
 		}
 		r.DrawText(name, 12, leftX+30, y, clr, false)
@@ -158,7 +158,7 @@ func (s *ChestScene) Draw(r Renderer) {
 				clr = Color{255, 255, 255, 255}
 			}
 			name := entry.DefID
-			if def, ok := s.game.Registry.GetItemDef(entry.DefID); ok {
+			if def, ok := s.game.registry.GetItemDef(entry.DefID); ok {
 				name = def.Name
 			}
 			if entry.Equipped {
@@ -178,7 +178,7 @@ func (g *GameScene) currentWeight() int {
 	}
 	w := 0
 	for _, entry := range inv.Items {
-		def, ok := g.Registry.GetItemDef(entry.DefID)
+		def, ok := g.registry.GetItemDef(entry.DefID)
 		if ok {
 			w += def.Weight * entry.Count
 		}
@@ -191,7 +191,7 @@ func (g *GameScene) addItemToInventory(entry component.ItemEntry) bool {
 	if inv == nil {
 		return false
 	}
-	def, ok := g.Registry.GetItemDef(entry.DefID)
+	def, ok := g.registry.GetItemDef(entry.DefID)
 	if !ok {
 		return false
 	}

@@ -2,11 +2,10 @@ package rules
 
 import (
 	"math"
-	"math/rand"
 
-	"github.com/gentaman/myrogue/internal/core/action"
 	"github.com/gentaman/myrogue/internal/core/component"
 	"github.com/gentaman/myrogue/internal/core/entity"
+	"github.com/gentaman/myrogue/internal/core/event"
 )
 
 type EntityAccess interface {
@@ -22,37 +21,41 @@ type EntityAccess interface {
 type Resolver struct {
 	Access   EntityAccess
 	PlayerID entity.ID
+	RNG      RNG
 }
 
-func (r *Resolver) ProcessDeath(ev action.EventDeath) []action.Event {
-	var events []action.Event
+func (r *Resolver) ProcessDeath(ev event.EventDeath) []event.Event {
+	var events []event.Event
 	pos := r.Access.GetPosition(ev.Entity)
 	inv := r.Access.GetInventory(ev.Entity)
 	if pos != nil && inv != nil && len(inv.Items) > 0 {
-		events = append(events, action.EventDrop{X: pos.X, Y: pos.Y, Items: inv.Items})
+		events = append(events, event.EventDrop{X: pos.X, Y: pos.Y, Items: inv.Items})
 	}
 	r.Access.Destroy(ev.Entity)
 	return events
 }
 
-func (r *Resolver) ProcessXP(ev action.EventXP) []action.Event {
+func (r *Resolver) ProcessXP(ev event.EventXP) []event.Event {
 	stats := r.Access.GetStats(ev.Entity)
 	if stats == nil || stats.Level >= 100 {
 		return nil
 	}
 	stats.XP += ev.Amount
-	var events []action.Event
+	var events []event.Event
 	for stats.XP >= stats.XPToNext && stats.Level < 100 {
 		stats.XP -= stats.XPToNext
 		stats.Level++
 		stats.XPToNext = int(10 * math.Pow(float64(stats.Level), 1.5))
-		events = append(events, action.EventLevelUp{Entity: ev.Entity, NewLevel: stats.Level})
-		rollStatsUp(stats, rand.New(rand.NewSource(rand.Int63())))
+		events = append(events, event.EventLevelUp{Entity: ev.Entity, NewLevel: stats.Level})
+		rollStatsUp(stats, r.RNG)
 	}
 	return events
 }
 
-func rollStatsUp(s *component.Stats, rng *rand.Rand) {
+func rollStatsUp(s *component.Stats, rng RNG) {
+	if rng == nil {
+		return
+	}
 	count := rng.Intn(3) + 1
 	for i := 0; i < count; i++ {
 		stat := rng.Intn(6)

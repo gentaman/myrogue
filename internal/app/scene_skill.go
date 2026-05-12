@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"math/rand"
 
 	"github.com/gentaman/myrogue/internal/animation"
 	"github.com/gentaman/myrogue/internal/core/action"
@@ -10,6 +9,7 @@ import (
 	"github.com/gentaman/myrogue/internal/core/component"
 	"github.com/gentaman/myrogue/internal/core/content"
 	"github.com/gentaman/myrogue/internal/core/entity"
+	"github.com/gentaman/myrogue/internal/core/event"
 	"github.com/gentaman/myrogue/internal/core/world"
 )
 
@@ -21,7 +21,7 @@ type SkillScene struct {
 
 func NewSkillScene(game *GameScene) *SkillScene {
 	var skills []content.SkillDef
-	for _, sk := range game.Registry.Skills {
+	for _, sk := range game.registry.Skills {
 		skills = append(skills, sk)
 	}
 	return &SkillScene{game: game, skills: skills}
@@ -120,8 +120,8 @@ func (s *SkillScene) executeAttackSkill(sk content.SkillDef) {
 		})
 	}
 
-	attacker := g.buildCombatant(g.Player)
-	defender := g.buildCombatant(target)
+	attacker := action.BuildCombatant(g.Player, g)
+	defender := action.BuildCombatant(target, g)
 	damage := combat.CalcDamage(attacker, defender, combat.CombatTypeMagical, sk.Power, sk.Element)
 	if damage < 1 {
 		damage = 1
@@ -135,7 +135,7 @@ func (s *SkillScene) executeAttackSkill(sk content.SkillDef) {
 	g.pushMessage(fmt.Sprintf("%sで%sに %d ダメージ！", sk.Name, g.GetName(target), damage))
 
 	if defStats != nil && defStats.HP <= 0 {
-		events := []action.Event{action.EventDeath{Entity: target, Name: g.GetName(target)}}
+		events := []event.Event{event.EventDeath{Entity: target, Name: g.GetName(target)}}
 		g.processEvents(events)
 	}
 }
@@ -175,8 +175,8 @@ func (s *SkillScene) executeDebuffSkill(sk content.SkillDef) {
 	}
 
 	if sk.Power > 0 {
-		attacker := g.buildCombatant(g.Player)
-		defender := g.buildCombatant(target)
+		attacker := action.BuildCombatant(g.Player, g)
+		defender := action.BuildCombatant(target, g)
 		damage := combat.CalcDamage(attacker, defender, combat.CombatTypeMagical, sk.Power, sk.Element)
 		defStats := g.GetStats(target)
 		if defStats != nil {
@@ -185,7 +185,7 @@ func (s *SkillScene) executeDebuffSkill(sk content.SkillDef) {
 		}
 	}
 
-	if sk.Status != "" && rand.Intn(100) < 70 {
+	if sk.Status != "" && g.rng.Intn(100) < 70 {
 		g.applyStatus(target, component.StatusFromString(sk.Status), sk.Duration)
 	} else if sk.Status != "" {
 		g.pushMessage(fmt.Sprintf("%sは効かなかった...", sk.Name))
