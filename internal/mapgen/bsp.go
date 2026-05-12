@@ -148,7 +148,7 @@ func nearSpecialTile(gm *world.GameMap, x, y int) bool {
 	return false
 }
 
-func Generate(floor int, floorDef *content.FloorDef, registry *content.Registry, seed int64) *world.GameMap {
+func Generate(floor int, floorDef *content.FloorDef, registry *content.Registry, seed int64, checker content.DropConditionChecker) *world.GameMap {
 	rng := rand.New(rand.NewSource(seed))
 	gm := &world.GameMap{
 		Seed:  seed,
@@ -201,11 +201,63 @@ func Generate(floor int, floorDef *content.FloorDef, registry *content.Registry,
 		}
 	}
 
-	placeItems(gm, floorDef, registry, rng)
+	placeItems(gm, floorDef, registry, rng, checker)
 	return gm
 }
 
-func placeItems(gm *world.GameMap, floorDef *content.FloorDef, registry *content.Registry, rng *rand.Rand) {
+func placeItems(gm *world.GameMap, floorDef *content.FloorDef, registry *content.Registry, rng *rand.Rand, checker content.DropConditionChecker) {
+	// 配置予定アイテムのリスト
+	var itemsToPlace []string
+
+	// 条件付き（または無条件）アイテムの評価
+	for _, ci := range floorDef.ConditionalItems {
+		if ci.Condition == "" || ci.Condition == "always" {
+			itemsToPlace = append(itemsToPlace, ci.ID)
+		} else if checker != nil && checker.CheckCondition(ci.Condition, ci.ID) {
+			itemsToPlace = append(itemsToPlace, ci.ID)
+		}
+	}
+
+	// 最下層（最後のフロア）なら「treasure」を必ず追加（既に持っていない場合のみ、かつ定義に含まれていない場合）
+	if gm.Floor == registry.FloorCount()-1 {
+		hasTreasure := false
+		for _, id := range itemsToPlace {
+			if id == "treasure" {
+				hasTreasure = true
+				break
+			}
+		}
+		if !hasTreasure {
+			// 所持チェック
+			if checker == nil || checker.CheckCondition("unique", "treasure") {
+				itemsToPlace = append(itemsToPlace, "treasure")
+			}
+		}
+	}
+
+	// 特殊アイテム（条件クリア分）の配置
+	for _, itemID := range itemsToPlace {
+		for attempt := 0; attempt < 100; attempt++ {
+			roomIdx := rng.Intn(len(gm.Rooms))
+			r := gm.Rooms[roomIdx]
+			ix, iy := r.X+rng.Intn(r.W), r.Y+rng.Intn(r.H)
+			if gm.Tiles[ix][iy] != world.Floor || nearSpecialTile(gm, ix, iy) {
+				continue
+			}
+			def, ok := registry.GetItemDef(itemID)
+			if !ok {
+				break
+			}
+			entry := ItemEntryFromDef(def, gm.Seed, gm.Floor)
+			gm.Items = append(gm.Items, world.MapItem{
+				X: ix, Y: iy,
+				Inventory: []component.ItemEntry{entry},
+			})
+			break
+		}
+	}
+
+	// ランダムアイテムの配置
 	weights := make([]int, len(floorDef.ItemPool))
 	for i, entry := range floorDef.ItemPool {
 		weights[i] = entry.Weight

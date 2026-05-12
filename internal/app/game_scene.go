@@ -114,7 +114,7 @@ func RestoreGameScene(snap *save.Snapshot, reg *content.Registry, audio AudioPla
 	g.Scheduler.TurnCount = snap.TurnCount
 
 	floorDef := reg.GetFloorDef(snap.Floor)
-	g.World = mapgen.Generate(snap.Floor, floorDef, reg, snap.MapSeed)
+	g.World = mapgen.Generate(snap.Floor, floorDef, reg, snap.MapSeed, g)
 
 	for _, es := range snap.Entities {
 		id := entity.ID(es.ID)
@@ -200,7 +200,7 @@ func (g *GameScene) spawnPlayer(reg *content.Registry) {
 func (g *GameScene) generateFloor(floor int) {
 	floorDef := g.Registry.GetFloorDef(floor)
 	seed := time.Now().UnixNano()
-	g.World = mapgen.Generate(floor, floorDef, g.Registry, seed)
+	g.World = mapgen.Generate(floor, floorDef, g.Registry, seed, g)
 
 	if len(g.World.Rooms) > 0 {
 		r := g.World.Rooms[0]
@@ -466,6 +466,40 @@ func (g *GameScene) tickAnimations() {
 		}
 	})
 	g.AnimQueue.TickWithDelta(delta)
+}
+
+func (g *GameScene) CheckCondition(condition, itemID string) bool {
+	switch condition {
+	case "unique":
+		return !g.isItemPossessed(itemID)
+	default:
+		return true
+	}
+}
+
+func (g *GameScene) isItemPossessed(itemID string) bool {
+	// プレイヤーのインベントリ
+	inv, ok := g.Inventories.Get(g.Player)
+	if ok {
+		for _, it := range inv.Items {
+			if it.DefID == itemID {
+				return true
+			}
+		}
+	}
+	// 仲間のインベントリ
+	allies := g.EntitiesWithFaction(component.FactionAlly)
+	for _, id := range allies {
+		inv, ok := g.Inventories.Get(id)
+		if ok {
+			for _, it := range inv.Items {
+				if it.DefID == itemID {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (g *GameScene) processEvents(events []action.Event) {
@@ -774,25 +808,11 @@ func (g *GameScene) checkTileAfterMove() {
 	tile := g.World.Tiles[pPos.X][pPos.Y]
 	switch tile {
 	case world.Stairs:
-		if g.hasTreasure() {
-			g.PlayState = StateWin
-			g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d", g.calcScore()))
-			if g.Audio != nil {
-				g.Audio.PlaySFX("stair_up")
-			}
-		} else {
-			g.pushMessage("宝がない！まだ帰れない。")
-		}
+		g.pushMessage("出口の階段だ。ここから脱出できる。")
 	case world.StairsDown:
-		if g.Audio != nil {
-			g.Audio.PlaySFX("stair_down")
-		}
-		g.tryChangeFloor(1)
+		g.pushMessage("下り階段だ。下の階へ進める。")
 	case world.StairsUp:
-		if g.Audio != nil {
-			g.Audio.PlaySFX("stair_up")
-		}
-		g.tryChangeFloor(-1)
+		g.pushMessage("上り階段だ。上の階へ戻れる。")
 	}
 }
 
@@ -847,7 +867,7 @@ func (g *GameScene) doChangeFloor(direction int) {
 	// Generate new floor
 	floorDef := g.Registry.GetFloorDef(nextFloor)
 	seed := time.Now().UnixNano()
-	g.World = mapgen.Generate(nextFloor, floorDef, g.Registry, seed)
+	g.World = mapgen.Generate(nextFloor, floorDef, g.Registry, seed, g)
 
 	// Remove old non-player entities
 	g.Positions.Each(func(id entity.ID, pos *component.Position) {
@@ -1072,10 +1092,39 @@ func (g *GameScene) execMenuItem() Scene {
 		g.Scheduler.StartCompanionPhase()
 	case menuExamine:
 		g.Scheduler.IncrementTurn()
+		pPos := g.playerPos()
+		tile := g.World.Tiles[pPos.X][pPos.Y]
+
+		if tile == world.Stairs || tile == world.StairsDown || tile == world.StairsUp {
+			if tile == world.Stairs {
+				if g.hasTreasure() {
+					g.PlayState = StateWin
+					g.pushMessage(fmt.Sprintf("脱出成功！ スコア: %d", g.calcScore()))
+					if g.Audio != nil {
+						g.Audio.PlaySFX("stair_up")
+					}
+				} else {
+					g.pushMessage("宝がない！まだ帰れない。")
+				}
+			} else if tile == world.StairsDown {
+				if g.Audio != nil {
+					g.Audio.PlaySFX("stair_down")
+				}
+				g.tryChangeFloor(1)
+			} else if tile == world.StairsUp {
+				if g.Audio != nil {
+					g.Audio.PlaySFX("stair_up")
+				}
+				g.tryChangeFloor(-1)
+			}
+			g.Scheduler.StartCompanionPhase()
+			return nil
+		}
+
 		if idx := g.itemAtFeet(); idx >= 0 {
 			return &ChestScene{game: g, chestIdx: idx}
 		}
-		g.pushMessage("特に何もない。")
+		g.pushMessage("足元には特に何もない。")
 		g.Scheduler.StartCompanionPhase()
 	case menuItem:
 		return &InventoryScene{game: g}
