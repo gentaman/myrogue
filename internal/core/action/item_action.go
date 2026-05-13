@@ -42,11 +42,23 @@ func (a *UseItemAction) Execute(actor entity.ID, w WorldAccess) []event.Event {
 	}
 
 	if def.Effect != nil {
+		pos := w.GetPosition(actor)
 		switch def.Effect.Type {
 		case "heal":
+			events = append(events, event.EventVisual{
+				ID:      "heal_flash",
+				SourceX: float64(pos.X), SourceY: float64(pos.Y),
+				TargetX: float64(pos.X), TargetY: float64(pos.Y),
+			})
 			events = append(events, event.EventHeal{Entity: actor, Amount: def.Effect.Amount})
 			events = append(events, event.EventLog{Text: fmt.Sprintf("%sを使った。HPが%d回復した。", def.Name, def.Effect.Amount)})
 		case "mp_heal":
+			events = append(events, event.EventVisual{
+				ID:      "heal_flash",
+				SourceX: float64(pos.X), SourceY: float64(pos.Y),
+				TargetX: float64(pos.X), TargetY: float64(pos.Y),
+				ColorHex: "#64B4FF",
+			})
 			events = append(events, event.EventMP{Entity: actor, Amount: def.Effect.Amount})
 			events = append(events, event.EventLog{Text: fmt.Sprintf("%sを使った。MPが%d回復した。", def.Name, def.Effect.Amount)})
 		case "reveal_map":
@@ -124,15 +136,18 @@ func (a *UseItemAction) handleRangedMagic(actor entity.ID, def *content.ItemDef,
 	}
 
 	color := def.Effect.Color
-	if color == "" {
-		color = "#FF4500"
+	animID := def.Effect.Type
+	if animID == "ranged_magic" {
+		animID = "thunder"
 	}
 
-	events = append(events, event.EventProjectile{
-		StartX: float64(pos.X), StartY: float64(pos.Y),
-		EndX: float64(tx), EndY: float64(ty),
-		TotalFrames: 15,
-		ColorHex:    color,
+	events = append(events, event.EventVisual{
+		ID:       animID,
+		SourceX:  float64(pos.X),
+		SourceY:  float64(pos.Y),
+		TargetX:  float64(tx),
+		TargetY:  float64(ty),
+		ColorHex: color,
 	})
 
 	if targetID != entity.InvalidID {
@@ -183,12 +198,15 @@ func (a *UseItemAction) handleAreaMagic(actor entity.ID, def *content.ItemDef, w
 		}
 		dist := math.Sqrt(float64((pos.X-uPos.X)*(pos.X-uPos.X) + (pos.Y-uPos.Y)*(pos.Y-uPos.Y)))
 		if dist <= float64(def.Effect.Range) {
-			events = append(events, event.EventProjectile{
-				StartX: float64(uPos.X), StartY: float64(uPos.Y),
-				EndX: float64(uPos.X), EndY: float64(uPos.Y),
-				TotalFrames: 10,
-				ColorHex:    def.Effect.Color,
-				IsFlash:     true,
+			animID := def.Effect.Type
+			if animID == "area_magic" {
+				animID = "holy_light"
+			}
+			events = append(events, event.EventVisual{
+				ID:      animID,
+				SourceX: float64(uPos.X), SourceY: float64(uPos.Y),
+				TargetX: float64(uPos.X), TargetY: float64(uPos.Y),
+				ColorHex: def.Effect.Color,
 			})
 
 			atk := BuildCombatant(actor, w)
@@ -218,8 +236,15 @@ func (a *UseItemAction) handleHealFaith(actor entity.ID, def *content.ItemDef, w
 	if stats == nil {
 		return nil
 	}
+	pos := w.GetPosition(actor)
 	amount := 5 + stats.Fai*2
 	return []event.Event{
+		event.EventVisual{
+			ID:      "heal_flash",
+			SourceX: float64(pos.X), SourceY: float64(pos.Y),
+			TargetX: float64(pos.X), TargetY: float64(pos.Y),
+			ColorHex: "#FFD700",
+		},
 		event.EventHeal{Entity: actor, Amount: amount},
 		event.EventLog{Text: def.Effect.Message},
 	}

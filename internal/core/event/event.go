@@ -129,6 +129,15 @@ type EventProjectile struct {
 
 func (EventProjectile) isEvent() {}
 
+type EventVisual struct {
+	ID               string
+	SourceX, SourceY float64
+	TargetX, TargetY float64
+	ColorHex         string // Optional override
+}
+
+func (EventVisual) isEvent() {}
+
 type EventWin struct {
 	Score int
 }

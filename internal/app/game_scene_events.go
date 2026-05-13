@@ -89,6 +89,25 @@ func (g *GameScene) processEvents(events []event.Event) {
 				ColorHex:    e.ColorHex,
 				IsFlash:     e.IsFlash,
 			})
+		case event.EventVisual:
+			def, ok := animation.Registry[e.ID]
+			if !ok {
+				// 登録されていない場合はデフォルトで飛んでいく
+				def = animation.VisualDef{Type: animation.VisualProjectile, TotalFrames: 10, DefaultColor: "#FFFFFF"}
+			}
+			clr := e.ColorHex
+			if clr == "" {
+				clr = def.DefaultColor
+			}
+			g.AnimQueue.Add(animation.Projectile{
+				StartX:      e.SourceX * TileSize,
+				StartY:      e.SourceY * TileSize,
+				EndX:        e.TargetX * TileSize,
+				EndY:        e.TargetY * TileSize,
+				TotalFrames: def.TotalFrames,
+				ColorHex:    clr,
+				IsFlash:     def.Type == animation.VisualFlash,
+			})
 		case event.EventFloorChange:
 			g.doChangeFloor(e.Direction)
 		case event.EventMP:

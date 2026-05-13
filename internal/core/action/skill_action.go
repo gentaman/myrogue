@@ -43,13 +43,13 @@ func (a *SkillAction) Execute(actor entity.ID, w WorldAccess) []event.Event {
 
 		pos := w.GetPosition(actor)
 		if pos != nil && sk.Range > 1 {
-			events = append(events, event.EventProjectile{
-				StartX:      float64(pos.X),
-				StartY:      float64(pos.Y),
-				EndX:        float64(a.TargetX),
-				EndY:        float64(a.TargetY),
-				TotalFrames: 12,
-				ColorHex:    sk.ColorHex,
+			events = append(events, event.EventVisual{
+				ID:       "magic_missile",
+				SourceX:  float64(pos.X),
+				SourceY:  float64(pos.Y),
+				TargetX:  float64(a.TargetX),
+				TargetY:  float64(a.TargetY),
+				ColorHex: sk.ColorHex,
 			})
 		}
 
@@ -77,6 +77,12 @@ func (a *SkillAction) Execute(actor entity.ID, w WorldAccess) []event.Event {
 
 	case content.SkillTypeHeal:
 		heal := sk.Power + stats.Wis/2
+		pos := w.GetPosition(actor)
+		events = append(events, event.EventVisual{
+			ID:      "heal_flash",
+			SourceX: float64(pos.X), SourceY: float64(pos.Y),
+			TargetX: float64(pos.X), TargetY: float64(pos.Y),
+		})
 		events = append(events, event.EventHeal{Entity: actor, Amount: heal})
 		events = append(events, event.EventLog{Text: fmt.Sprintf("%sを使った！ HPが%d回復した。", sk.Name, heal)})
 
