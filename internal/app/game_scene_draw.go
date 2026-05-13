@@ -230,7 +230,13 @@ func (g *GameScene) drawWorld(r Renderer) {
 		curX := p.StartX + (p.EndX-p.StartX)*t
 		curY := p.StartY + (p.EndY-p.StartY)*t
 		clr := hexToColor(p.ColorHex)
-		r.DrawRect(int(curX-camX-4), int(curY-camY-4), 8, 8, clr)
+		if p.ColorHex == "#FF4500" { // Fireball flicker
+			if (g.Frame/5)%2 == 0 {
+				clr = Color{255, 200, 50, 255} // Yellow-ish
+			}
+		}
+		// Larger projectile (12x12) centered at curX, curY
+		r.DrawRect(int(curX-camX-6), int(curY-camY-6), 12, 12, clr)
 	}
 }
 

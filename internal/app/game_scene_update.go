@@ -58,6 +58,10 @@ func (g *GameScene) Update(input InputState) Scene {
 	g.handleDebugInput(input)
 	g.Clock.Tick()
 
+	if input.DebugItem {
+		return &DebugItemScene{game: g}
+	}
+
 	if g.isAnyAnimating() {
 		g.tickAnimations()
 		return nil

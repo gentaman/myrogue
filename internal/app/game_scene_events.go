@@ -80,11 +80,12 @@ func (g *GameScene) processEvents(events []event.Event) {
 		case event.EventItemConsume:
 			g.Resolver.ProcessItemConsume(e)
 		case event.EventProjectile:
+			// Center the projectile
 			g.AnimQueue.Add(animation.Projectile{
-				StartX:      e.StartX * TileSize,
-				StartY:      e.StartY * TileSize,
-				EndX:        e.EndX * TileSize,
-				EndY:        e.EndY * TileSize,
+				StartX:      (e.StartX + 0.5) * TileSize,
+				StartY:      (e.StartY + 0.5) * TileSize,
+				EndX:        (e.EndX + 0.5) * TileSize,
+				EndY:        (e.EndY + 0.5) * TileSize,
 				TotalFrames: e.TotalFrames,
 				ColorHex:    e.ColorHex,
 				IsFlash:     e.IsFlash,
@@ -99,14 +100,28 @@ func (g *GameScene) processEvents(events []event.Event) {
 			if clr == "" {
 				clr = def.DefaultColor
 			}
+
+			isFlash := def.Type == animation.VisualFlash
+			sx, sy := e.SourceX*TileSize, e.SourceY*TileSize
+			ex, ey := e.TargetX*TileSize, e.TargetY*TileSize
+
+			if !isFlash {
+				// Projectiles should be centered
+				offset := float64(TileSize) / 2
+				sx += offset
+				sy += offset
+				ex += offset
+				ey += offset
+			}
+
 			g.AnimQueue.Add(animation.Projectile{
-				StartX:      e.SourceX * TileSize,
-				StartY:      e.SourceY * TileSize,
-				EndX:        e.TargetX * TileSize,
-				EndY:        e.TargetY * TileSize,
+				StartX:      sx,
+				StartY:      sy,
+				EndX:        ex,
+				EndY:        ey,
 				TotalFrames: def.TotalFrames,
 				ColorHex:    clr,
-				IsFlash:     def.Type == animation.VisualFlash,
+				IsFlash:     isFlash,
 			})
 		case event.EventFloorChange:
 			g.doChangeFloor(e.Direction)

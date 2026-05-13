@@ -43,4 +43,5 @@ type InputState struct {
 	DebugPause    bool
 	DebugStep     bool
 	DebugSkipAnim bool
+	DebugItem     bool
 }

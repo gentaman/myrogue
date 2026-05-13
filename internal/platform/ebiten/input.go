@@ -104,6 +104,9 @@ func PollInput() app.InputState {
 	if inpututil.IsKeyJustPressed(ebt.KeyF10) {
 		state.DebugSkipAnim = true
 	}
+	if inpututil.IsKeyJustPressed(ebt.KeyF11) {
+		state.DebugItem = true
+	}
 
 	return state
 }
