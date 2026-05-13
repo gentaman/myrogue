@@ -72,7 +72,25 @@ func (r *Resolver) ProcessItemConsume(ev event.EventItemConsume) []event.Event {
 		return nil
 	}
 	entry := &inv.Items[ev.ItemIdx]
-	entry.Count -= ev.Count
+	if ev.Durability > 0 && entry.Durability > 0 {
+		entry.Durability -= ev.Durability
+		if entry.Durability <= 0 {
+			entry.Count--
+			// リセット耐久度は定義から取るべきだが、一旦簡易的に
+			// 実際には壊れるパターンが多い
+			if entry.Count > 0 {
+				reg := r.Access.Registry()
+				if reg != nil {
+					if def, ok := reg.GetItemDef(entry.DefID); ok {
+						entry.Durability = def.Durability
+					}
+				}
+			}
+		}
+	} else if ev.Count > 0 {
+		entry.Count -= ev.Count
+	}
+
 	if entry.Count <= 0 {
 		inv.Items = append(inv.Items[:ev.ItemIdx], inv.Items[ev.ItemIdx+1:]...)
 	}

@@ -111,9 +111,10 @@ type EventEquip struct {
 func (EventEquip) isEvent() {}
 
 type EventItemConsume struct {
-	Entity  entity.ID
-	ItemIdx int
-	Count   int
+	Entity     entity.ID
+	ItemIdx    int
+	Count      int
+	Durability int
 }
 
 func (EventItemConsume) isEvent() {}
@@ -133,6 +134,10 @@ type EventWin struct {
 }
 
 func (EventWin) isEvent() {}
+
+type EventRevealMap struct{}
+
+func (EventRevealMap) isEvent() {}
 
 type EventSwap struct {
 	Entity1, Entity2 entity.ID

@@ -104,6 +104,12 @@ func (g *GameScene) processEvents(events []event.Event) {
 			if g.Audio != nil {
 				g.Audio.PlaySFX("stair_up")
 			}
+		case event.EventRevealMap:
+			for x := 0; x < world.MapWidth; x++ {
+				for y := 0; y < world.MapHeight; y++ {
+					g.World.Explored[x][y] = true
+				}
+			}
 		}
 	}
 }

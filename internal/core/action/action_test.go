@@ -45,6 +45,7 @@ func (m *mockWorld) Map() *world.GameMap         { return m.gamemap }
 func (m *mockWorld) PlayerID() entity.ID         { return m.player }
 func (m *mockWorld) RNG() rules.RNG              { return m.rng }
 func (m *mockWorld) Registry() *content.Registry { return m.reg }
+func (m *mockWorld) EachUnit(func(entity.ID))    {}
 
 type mockRNG struct{ val int }
 

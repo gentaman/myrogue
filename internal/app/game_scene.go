@@ -290,8 +290,19 @@ func (g *GameScene) CheckCondition(condition, itemID string) bool {
 	}
 }
 
-func (g *GameScene) RNG() rules.RNG              { return g.rng }
 func (g *GameScene) Registry() *content.Registry { return g.registry }
+
+func (g *GameScene) EachUnit(fn func(entity.ID)) {
+	g.Positions.Each(func(id entity.ID, _ *component.Position) {
+		if g.Entities.IsAlive(id) {
+			fn(id)
+		}
+	})
+}
+
+func (g *GameScene) RNG() rules.RNG {
+	return g.rng
+}
 
 func equippedPhyAtk(inv *component.Inventory, reg *content.Registry) int {
 	if inv == nil {
