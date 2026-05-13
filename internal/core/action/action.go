@@ -99,6 +99,7 @@ func (a *AttackAction) Execute(actor entity.ID, w WorldAccess) []event.Event {
 		Damage:   res.Damage,
 		Missed:   res.Missed,
 		Dir:      dir,
+		Element:  atk.Element,
 	})
 
 	if res.Killed {

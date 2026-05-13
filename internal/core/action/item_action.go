@@ -153,7 +153,8 @@ func (a *UseItemAction) handleRangedMagic(actor entity.ID, def *content.ItemDef,
 	if targetID != entity.InvalidID {
 		atk := BuildCombatant(actor, w)
 		defCombatant := BuildCombatant(targetID, w)
-		res := combat.ResolveCombat(atk, defCombatant, combat.CombatTypeMagical, def.Effect.Damage, component.ElementFromString(def.Effect.Element), w.PlayerID(), w.RNG())
+		element := component.ElementFromString(def.Effect.Element)
+		res := combat.ResolveCombat(atk, defCombatant, combat.CombatTypeMagical, def.Effect.Damage, element, w.PlayerID(), w.RNG())
 
 		for _, log := range res.Log {
 			events = append(events, event.EventLog{Text: log})
@@ -161,6 +162,7 @@ func (a *UseItemAction) handleRangedMagic(actor entity.ID, def *content.ItemDef,
 		events = append(events, event.EventAttack{
 			Attacker: actor, Defender: targetID,
 			Damage: res.Damage, Missed: res.Missed, Dir: pos.Dir,
+			Element: element,
 		})
 		if res.Killed {
 			events = append(events, event.EventDeath{Entity: targetID, Name: defCombatant.Name})
@@ -211,7 +213,8 @@ func (a *UseItemAction) handleAreaMagic(actor entity.ID, def *content.ItemDef, w
 
 			atk := BuildCombatant(actor, w)
 			defCombatant := BuildCombatant(id, w)
-			res := combat.ResolveCombat(atk, defCombatant, combat.CombatTypeMagical, def.Effect.Damage, component.ElementFromString(def.Effect.Element), w.PlayerID(), w.RNG())
+			element := component.ElementFromString(def.Effect.Element)
+			res := combat.ResolveCombat(atk, defCombatant, combat.CombatTypeMagical, def.Effect.Damage, element, w.PlayerID(), w.RNG())
 
 			for _, log := range res.Log {
 				events = append(events, event.EventLog{Text: log})
@@ -219,6 +222,7 @@ func (a *UseItemAction) handleAreaMagic(actor entity.ID, def *content.ItemDef, w
 			events = append(events, event.EventAttack{
 				Attacker: actor, Defender: id,
 				Damage: res.Damage, Missed: res.Missed, Dir: pos.Dir,
+				Element: element,
 			})
 			if res.Killed {
 				events = append(events, event.EventDeath{Entity: id, Name: defCombatant.Name})

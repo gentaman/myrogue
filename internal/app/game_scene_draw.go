@@ -134,6 +134,14 @@ func (g *GameScene) drawWorld(r Renderer) {
 
 		anim := g.GetAnim(id)
 		if anim != nil && anim.DamageAnim > 0 && (int(anim.DamageAnim)/4)%2 == 0 {
+			// Damage flash
+			clr := hexToColor(ColorNone) // Default
+			if anim.DamageColor != "" {
+				clr = hexToColor(anim.DamageColor)
+			}
+			sx := float64(pos.X*TileSize) - camX
+			sy := float64(pos.Y*TileSize) - camY
+			r.DrawRect(int(sx), int(sy), TileSize-1, TileSize-1, clr)
 			return
 		}
 

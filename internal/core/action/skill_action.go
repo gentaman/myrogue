@@ -66,6 +66,7 @@ func (a *SkillAction) Execute(actor entity.ID, w WorldAccess) []event.Event {
 			Defender: target,
 			Damage:   damage,
 			Dir:      component.DirFromDelta(a.TargetX-pos.X, a.TargetY-pos.Y),
+			Element:  sk.Element,
 		})
 
 		if def.Stats.HP-damage <= 0 {

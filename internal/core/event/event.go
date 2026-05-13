@@ -22,6 +22,7 @@ type EventAttack struct {
 	Damage   int
 	Missed   bool
 	Dir      component.Dir
+	Element  component.Element
 }
 
 func (EventAttack) isEvent() {}

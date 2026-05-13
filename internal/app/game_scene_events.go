@@ -52,9 +52,27 @@ func (g *GameScene) processEvents(events []event.Event) {
 			if anim, ok := g.Anims.Get(e.Attacker); ok {
 				anim.AttackAnim = component.AttackAnimFrames
 			}
-			// ディフェンダーの被ダメージアニメーション
-			if anim, ok := g.Anims.Get(e.Defender); ok {
-				anim.DamageAnim = component.DamageAnimFrames
+			// ディフェンダーの被ダメージアニメーション (ダメージがある場合のみ)
+			if e.Damage > 0 {
+				if anim, ok := g.Anims.Get(e.Defender); ok {
+					anim.DamageAnim = component.DamageAnimFrames
+					switch e.Element {
+					case component.ElementFire:
+						anim.DamageColor = ColorFire
+					case component.ElementWater:
+						anim.DamageColor = ColorWater
+					case component.ElementAir:
+						anim.DamageColor = ColorAir
+					case component.ElementEarth:
+						anim.DamageColor = ColorEarth
+					case component.ElementLight:
+						anim.DamageColor = ColorLight
+					case component.ElementDark:
+						anim.DamageColor = ColorDark
+					default:
+						anim.DamageColor = ColorNone
+					}
+				}
 			}
 		case event.EventMoved:
 			if pos, ok := g.Positions.Get(e.Entity); ok {
