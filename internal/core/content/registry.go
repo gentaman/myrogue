@@ -93,6 +93,9 @@ func (r *Registry) Validate() error {
 			if a.HP <= 0 {
 				errs = append(errs, fmt.Sprintf("%s %s: HP must be positive", category, a.ID))
 			}
+			if a.Rarity < 0 {
+				errs = append(errs, fmt.Sprintf("%s %s: Rarity must be non-negative", category, a.ID))
+			}
 		}
 	}
 	validateActor("player", r.Players)
@@ -104,6 +107,12 @@ func (r *Registry) Validate() error {
 		if it.ID == "" {
 			errs = append(errs, "item: empty ID")
 		}
+		if it.Weight < 0 {
+			errs = append(errs, fmt.Sprintf("item %s: Weight must be non-negative", it.ID))
+		}
+		if it.Rarity < 0 {
+			errs = append(errs, fmt.Sprintf("item %s: Rarity must be non-negative", it.ID))
+		}
 	}
 
 	// Skills
@@ -111,18 +120,30 @@ func (r *Registry) Validate() error {
 		if sk.ID == "" {
 			errs = append(errs, "skill: empty ID")
 		}
+		if sk.MPCost < 0 {
+			errs = append(errs, fmt.Sprintf("skill %s: MPCost must be non-negative", sk.ID))
+		}
 	}
 
 	// Floors
 	for _, f := range r.Floors {
+		if f.MinRooms <= 0 || f.MaxRooms < f.MinRooms {
+			errs = append(errs, fmt.Sprintf("floor %d: invalid room count range (%d-%d)", f.Floor, f.MinRooms, f.MaxRooms))
+		}
 		for _, e := range f.EnemyPool {
 			if _, ok := r.EnemyIDMap[e.ID]; !ok {
 				errs = append(errs, fmt.Sprintf("floor %d: enemy pool contains unknown ID %s", f.Floor, e.ID))
+			}
+			if e.Weight <= 0 {
+				errs = append(errs, fmt.Sprintf("floor %d: enemy %s weight must be positive", f.Floor, e.ID))
 			}
 		}
 		for _, i := range f.ItemPool {
 			if _, ok := r.ItemIDMap[i.ID]; !ok {
 				errs = append(errs, fmt.Sprintf("floor %d: item pool contains unknown ID %s", f.Floor, i.ID))
+			}
+			if i.Weight <= 0 {
+				errs = append(errs, fmt.Sprintf("floor %d: item %s weight must be positive", f.Floor, i.ID))
 			}
 		}
 		for _, ci := range f.ConditionalItems {

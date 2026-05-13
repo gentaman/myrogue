@@ -3,13 +3,9 @@ package app
 import (
 	"fmt"
 
-	"github.com/gentaman/myrogue/internal/animation"
 	"github.com/gentaman/myrogue/internal/core/action"
-	"github.com/gentaman/myrogue/internal/core/combat"
-	"github.com/gentaman/myrogue/internal/core/component"
 	"github.com/gentaman/myrogue/internal/core/content"
 	"github.com/gentaman/myrogue/internal/core/entity"
-	"github.com/gentaman/myrogue/internal/core/event"
 	"github.com/gentaman/myrogue/internal/core/world"
 )
 
@@ -52,144 +48,32 @@ func (s *SkillScene) Update(input InputState) Scene {
 
 func (s *SkillScene) useSkill(sk content.SkillDef) Scene {
 	g := s.game
-	stats := g.GetStats(g.Player)
-	if stats == nil {
+	pPos := g.playerPos()
+	if pPos == nil {
 		return g
 	}
-	if stats.MP < sk.MPCost {
-		g.pushMessage("MPが足りない！")
-		return g
-	}
-	stats.MP -= sk.MPCost
-	g.Scheduler.IncrementTurn()
 
-	switch sk.Type {
-	case content.SkillTypeAttack:
-		s.executeAttackSkill(sk)
-	case content.SkillTypeHeal:
-		heal := sk.Power + stats.Wis/2
-		stats.HP += heal
-		if stats.HP > stats.MaxHP {
-			stats.HP = stats.MaxHP
-		}
-		g.pushMessage(fmt.Sprintf("%sを使った！ HPが%d回復した。", sk.Name, heal))
-	case content.SkillTypeBuff:
-		if sk.Status != "" {
-			g.applyStatus(g.Player, component.StatusFromString(sk.Status), sk.Duration)
-		}
-		g.pushMessage(fmt.Sprintf("%sを使った！", sk.Name))
-	case content.SkillTypeDebuff:
-		s.executeDebuffSkill(sk)
+	var tx, ty int
+	if sk.Range <= 1 {
+		dx, dy := pPos.Dir.Delta()
+		tx, ty = pPos.X+dx, pPos.Y+dy
+	} else {
+		target, rtx, rty := s.findRangedTarget(sk.Range)
+		_ = target
+		tx, ty = rtx, rty
 	}
+
+	g.Scheduler.IncrementTurn()
+	act := &action.SkillAction{
+		SkillID: sk.ID,
+		TargetX: tx,
+		TargetY: ty,
+	}
+	events := act.Execute(g.Player, g)
+	g.processEvents(events)
 
 	g.Scheduler.StartCompanionPhase()
 	return g
-}
-
-func (s *SkillScene) executeAttackSkill(sk content.SkillDef) {
-	g := s.game
-	pPos := g.playerPos()
-	if pPos == nil {
-		return
-	}
-
-	var target entity.ID
-	var tx, ty int
-
-	if sk.Range <= 1 {
-		dx, dy := pPos.Dir.Delta()
-		tx, ty = pPos.X+dx, pPos.Y+dy
-		target = g.UnitAt(tx, ty)
-	} else {
-		target, tx, ty = s.findRangedTarget(sk.Range)
-	}
-
-	if target == entity.InvalidID {
-		g.pushMessage(fmt.Sprintf("%sを放った！ しかし何もいなかった。", sk.Name))
-		return
-	}
-
-	if sk.Range > 1 {
-		g.AnimQueue.Add(animation.Projectile{
-			StartX:      float64(pPos.X * TileSize),
-			StartY:      float64(pPos.Y * TileSize),
-			EndX:        float64(tx * TileSize),
-			EndY:        float64(ty * TileSize),
-			TotalFrames: 12,
-			ColorHex:    sk.ColorHex,
-		})
-	}
-
-	attacker := action.BuildCombatant(g.Player, g)
-	defender := action.BuildCombatant(target, g)
-	damage := combat.CalcDamage(attacker, defender, combat.CombatTypeMagical, sk.Power, sk.Element)
-	if damage < 1 {
-		damage = 1
-	}
-
-	defStats := g.GetStats(target)
-	if defStats != nil {
-		defStats.HP -= damage
-	}
-
-	g.pushMessage(fmt.Sprintf("%sで%sに %d ダメージ！", sk.Name, g.GetName(target), damage))
-
-	if defStats != nil && defStats.HP <= 0 {
-		events := []event.Event{event.EventDeath{Entity: target, Name: g.GetName(target)}}
-		g.processEvents(events)
-	}
-}
-
-func (s *SkillScene) executeDebuffSkill(sk content.SkillDef) {
-	g := s.game
-	pPos := g.playerPos()
-	if pPos == nil {
-		return
-	}
-
-	var target entity.ID
-	var tx, ty int
-
-	if sk.Range <= 1 {
-		dx, dy := pPos.Dir.Delta()
-		tx, ty = pPos.X+dx, pPos.Y+dy
-		target = g.UnitAt(tx, ty)
-	} else {
-		target, tx, ty = s.findRangedTarget(sk.Range)
-	}
-
-	if target == entity.InvalidID {
-		g.pushMessage(fmt.Sprintf("%sを放った！ しかし何もいなかった。", sk.Name))
-		return
-	}
-
-	if sk.Range > 1 {
-		g.AnimQueue.Add(animation.Projectile{
-			StartX:      float64(pPos.X * TileSize),
-			StartY:      float64(pPos.Y * TileSize),
-			EndX:        float64(tx * TileSize),
-			EndY:        float64(ty * TileSize),
-			TotalFrames: 12,
-			ColorHex:    sk.ColorHex,
-		})
-	}
-
-	if sk.Power > 0 {
-		attacker := action.BuildCombatant(g.Player, g)
-		defender := action.BuildCombatant(target, g)
-		damage := combat.CalcDamage(attacker, defender, combat.CombatTypeMagical, sk.Power, sk.Element)
-		defStats := g.GetStats(target)
-		if defStats != nil {
-			defStats.HP -= damage
-			g.pushMessage(fmt.Sprintf("%sで%sに %d ダメージ！", sk.Name, g.GetName(target), damage))
-		}
-	}
-
-	if sk.Status != "" && g.rng.Intn(100) < 70 {
-		g.applyStatus(target, component.StatusFromString(sk.Status), sk.Duration)
-	} else if sk.Status != "" {
-		g.pushMessage(fmt.Sprintf("%sは効かなかった...", sk.Name))
-	}
 }
 
 func (s *SkillScene) findRangedTarget(maxRange int) (entity.ID, int, int) {
@@ -207,38 +91,31 @@ func (s *SkillScene) findRangedTarget(maxRange int) (entity.ID, int, int) {
 			return occ, tx, ty
 		}
 	}
-	return entity.InvalidID, 0, 0
+	return entity.InvalidID, pPos.X + dx, pPos.Y + dy
 }
 
 func (s *SkillScene) Draw(r Renderer) {
 	s.game.Draw(r)
-
-	panelW, panelH := 300, 40+len(s.skills)*26
-	if panelH > ScreenHeight-40 {
-		panelH = ScreenHeight - 40
-	}
-	px, py := (ScreenWidth-panelW)/2, 30
-	r.DrawPanel(px, py, panelW, panelH, Color{20, 20, 40, 240}, Color{100, 100, 200, 255})
-	r.DrawText("スキル選択", 14, ScreenWidth/2, py+12, Color{255, 220, 100, 255}, true)
-
-	stats := s.game.GetStats(s.game.Player)
-	mpText := ""
-	if stats != nil {
-		mpText = fmt.Sprintf("MP: %d/%d", stats.MP, stats.MaxMP)
-	}
-	r.DrawText(mpText, 11, px+panelW-10, py+12, Color{100, 200, 255, 255}, false)
+	const (
+		w = 300
+		h = 240
+		x = (ScreenWidth - w) / 2
+		y = (ScreenHeight - h) / 2
+	)
+	r.DrawPanel(x, y, w, h, Color{30, 30, 40, 220}, Color{100, 100, 150, 255})
+	r.DrawText("SKILL MENU", 14, ScreenWidth/2, y+15, Color{200, 200, 255, 255}, true)
 
 	for i, sk := range s.skills {
-		y := py + 36 + i*26
 		clr := Color{200, 200, 200, 255}
-		if stats != nil && stats.MP < sk.MPCost {
-			clr = Color{100, 100, 100, 255}
-		}
 		if i == s.cursor {
 			clr = Color{255, 255, 100, 255}
-			r.DrawText("▶", 14, px+10, y, clr, false)
+			r.DrawRect(x+10, y+40+i*20, w-20, 18, Color{255, 255, 255, 30})
 		}
-		label := fmt.Sprintf("%s (MP:%d)", sk.Name, sk.MPCost)
-		r.DrawText(label, 13, px+30, y, clr, false)
+		r.DrawText(fmt.Sprintf("%s (MP:%d)", sk.Name, sk.MPCost), 12, x+20, y+40+i*20, clr, false)
+	}
+
+	if len(s.skills) > 0 {
+		desc := s.skills[s.cursor].Desc
+		r.DrawText(desc, 10, ScreenWidth/2, y+h-30, Color{180, 180, 180, 255}, true)
 	}
 }

@@ -11,6 +11,7 @@ type EventMoved struct {
 	Entity       entity.ID
 	FromX, FromY int
 	ToX, ToY     int
+	Dir          component.Dir
 }
 
 func (EventMoved) isEvent() {}
@@ -20,6 +21,7 @@ type EventAttack struct {
 	Defender entity.ID
 	Damage   int
 	Missed   bool
+	Dir      component.Dir
 }
 
 func (EventAttack) isEvent() {}
@@ -31,12 +33,41 @@ type EventDeath struct {
 
 func (EventDeath) isEvent() {}
 
+type EventDirChanged struct {
+	Entity entity.ID
+	Dir    component.Dir
+}
+
+func (EventDirChanged) isEvent() {}
+
 type EventXP struct {
 	Entity entity.ID
 	Amount int
 }
 
 func (EventXP) isEvent() {}
+
+type EventMP struct {
+	Entity entity.ID
+	Amount int // Positive for gain, negative for cost
+}
+
+func (EventMP) isEvent() {}
+
+type EventHeal struct {
+	Entity entity.ID
+	Amount int
+}
+
+func (EventHeal) isEvent() {}
+
+type EventStatusEffect struct {
+	Entity   entity.ID
+	Effect   component.StatusType
+	Duration int
+}
+
+func (EventStatusEffect) isEvent() {}
 
 type EventLevelUp struct {
 	Entity   entity.ID
@@ -65,11 +96,27 @@ type EventFloorChange struct {
 func (EventFloorChange) isEvent() {}
 
 type EventDrop struct {
-	X, Y  int
-	Items []component.ItemEntry
+	Entity entity.ID
+	X, Y   int
+	Items  []component.ItemEntry
 }
 
 func (EventDrop) isEvent() {}
+
+type EventEquip struct {
+	Entity  entity.ID
+	ItemIdx int
+}
+
+func (EventEquip) isEvent() {}
+
+type EventItemConsume struct {
+	Entity  entity.ID
+	ItemIdx int
+	Count   int
+}
+
+func (EventItemConsume) isEvent() {}
 
 type EventProjectile struct {
 	StartX, StartY float64
@@ -80,6 +127,12 @@ type EventProjectile struct {
 }
 
 func (EventProjectile) isEvent() {}
+
+type EventWin struct {
+	Score int
+}
+
+func (EventWin) isEvent() {}
 
 type EventSwap struct {
 	Entity1, Entity2 entity.ID

@@ -32,11 +32,12 @@ func TestResolveCombat_Hit(t *testing.T) {
 	if res.Missed {
 		t.Errorf("expected hit, got miss")
 	}
-	if res.Damage != 3 { // 5 - 2 = 3
+	if res.Damage != 4 { // 5 + 1 - 2 = 4
 		t.Errorf("expected 3 damage, got %d", res.Damage)
 	}
-	if def.Stats.HP != 7 {
-		t.Errorf("expected defender HP 7, got %d", def.Stats.HP)
+	// Note: ResolveCombat no longer modifies defender.Stats.HP directly.
+	if def.Stats.HP != 10 {
+		t.Errorf("expected defender HP 10 (unmodified), got %d", def.Stats.HP)
 	}
 }
 

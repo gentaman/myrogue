@@ -60,7 +60,7 @@ func (g *GameScene) tickStatusEffects() {
 	})
 }
 
-func (g *GameScene) applyStatus(target entity.ID, status component.StatusType, duration int) {
+func (g *GameScene) ApplyStatus(target entity.ID, status component.StatusType, duration int) {
 	se, ok := g.StatusEffects.Get(target)
 	if !ok {
 		se = &component.StatusEffects{}

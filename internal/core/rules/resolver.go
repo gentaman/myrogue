@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gentaman/myrogue/internal/core/component"
+	"github.com/gentaman/myrogue/internal/core/content"
 	"github.com/gentaman/myrogue/internal/core/entity"
 	"github.com/gentaman/myrogue/internal/core/event"
 )
@@ -16,6 +17,8 @@ type EntityAccess interface {
 	Destroy(id entity.ID)
 	GetInventory(id entity.ID) *component.Inventory
 	GetPosition(id entity.ID) *component.Position
+	ApplyStatus(id entity.ID, effect component.StatusType, duration int)
+	Registry() *content.Registry
 }
 
 type Resolver struct {
@@ -29,10 +32,92 @@ func (r *Resolver) ProcessDeath(ev event.EventDeath) []event.Event {
 	pos := r.Access.GetPosition(ev.Entity)
 	inv := r.Access.GetInventory(ev.Entity)
 	if pos != nil && inv != nil && len(inv.Items) > 0 {
-		events = append(events, event.EventDrop{X: pos.X, Y: pos.Y, Items: inv.Items})
+		events = append(events, event.EventDrop{Entity: ev.Entity, X: pos.X, Y: pos.Y, Items: inv.Items})
 	}
 	r.Access.Destroy(ev.Entity)
 	return events
+}
+
+func (r *Resolver) ProcessEquip(ev event.EventEquip) []event.Event {
+	inv := r.Access.GetInventory(ev.Entity)
+	reg := r.Access.Registry()
+	if inv == nil || reg == nil || ev.ItemIdx < 0 || ev.ItemIdx >= len(inv.Items) {
+		return nil
+	}
+
+	entry := &inv.Items[ev.ItemIdx]
+	def, ok := reg.GetItemDef(entry.DefID)
+	if !ok {
+		return nil
+	}
+
+	entry.Equipped = !entry.Equipped
+	if entry.Equipped {
+		// unequip others in same slot
+		for i := range inv.Items {
+			if i != ev.ItemIdx && inv.Items[i].Equipped {
+				otherDef, ok2 := reg.GetItemDef(inv.Items[i].DefID)
+				if ok2 && otherDef.EquipSlot == def.EquipSlot {
+					inv.Items[i].Equipped = false
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (r *Resolver) ProcessItemConsume(ev event.EventItemConsume) []event.Event {
+	inv := r.Access.GetInventory(ev.Entity)
+	if inv == nil || ev.ItemIdx < 0 || ev.ItemIdx >= len(inv.Items) {
+		return nil
+	}
+	entry := &inv.Items[ev.ItemIdx]
+	entry.Count -= ev.Count
+	if entry.Count <= 0 {
+		inv.Items = append(inv.Items[:ev.ItemIdx], inv.Items[ev.ItemIdx+1:]...)
+	}
+	return nil
+}
+
+func (r *Resolver) ProcessAttack(ev event.EventAttack) []event.Event {
+	if ev.Missed {
+		return nil
+	}
+	stats := r.Access.GetStats(ev.Defender)
+	if stats != nil {
+		stats.HP -= ev.Damage
+	}
+	return nil
+}
+
+func (r *Resolver) ProcessMP(ev event.EventMP) []event.Event {
+	stats := r.Access.GetStats(ev.Entity)
+	if stats != nil {
+		stats.MP += ev.Amount
+		if stats.MP < 0 {
+			stats.MP = 0
+		}
+		if stats.MP > stats.MaxMP {
+			stats.MP = stats.MaxMP
+		}
+	}
+	return nil
+}
+
+func (r *Resolver) ProcessHeal(ev event.EventHeal) []event.Event {
+	stats := r.Access.GetStats(ev.Entity)
+	if stats != nil {
+		stats.HP += ev.Amount
+		if stats.HP > stats.MaxHP {
+			stats.HP = stats.MaxHP
+		}
+	}
+	return nil
+}
+
+func (r *Resolver) ProcessStatusEffect(ev event.EventStatusEffect) []event.Event {
+	r.Access.ApplyStatus(ev.Entity, ev.Effect, ev.Duration)
+	return nil
 }
 
 func (r *Resolver) ProcessXP(ev event.EventXP) []event.Event {

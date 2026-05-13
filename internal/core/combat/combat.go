@@ -62,7 +62,7 @@ func CalcDamage(attacker, defender *Combatant, cType CombatType, bonusAtk int, e
 		attack = attacker.Stats.Wis + attacker.MagAtk + bonusAtk
 		defence = defender.Stats.Fai + defender.MagDef
 	}
-	damage := int(float64(attack-defence) * multiplier)
+	damage := int(float64(attack+1-defence) * multiplier)
 	if damage < 0 {
 		damage = 0
 	}
@@ -98,10 +98,9 @@ func ResolveCombat(attacker, defender *Combatant, cType CombatType, bonusAtk int
 		res.Log = append(res.Log, fmt.Sprintf("%sが%sに %d のダメージを与えた！", attacker.Name, defender.Name, damage))
 	}
 
-	defender.Stats.HP -= damage
 	res.Damage = damage
 
-	if defender.Stats.HP <= 0 {
+	if defender.Stats.HP-damage <= 0 {
 		res.Killed = true
 		if attacker.ID != defender.ID && defender.XP > 0 {
 			res.XP = defender.XP

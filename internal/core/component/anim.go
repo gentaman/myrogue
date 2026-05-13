@@ -6,6 +6,6 @@ const (
 )
 
 type AnimState struct {
-	AttackAnim int
-	DamageAnim int
+	AttackAnim float64
+	DamageAnim float64
 }
