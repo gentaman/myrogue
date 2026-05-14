@@ -1,0 +1,24 @@
+[
+  {
+    "id": "adventurer",
+    "name": "冒険者",
+    "hp": 20,
+    "mp": 10,
+    "max_carry_weight": 10,
+    "element": "none",
+    "race": "human",
+    "personality": "calculated",
+    "neutral_threshold": 0,
+    "friendly_threshold": 0,
+    "rarity": 0,
+    "xp": 0,
+    "color": "#FFFFFF",
+    "str": 3,
+    "wis": 3,
+    "fai": 3,
+    "vit": 3,
+    "agi": 3,
+    "luk": 3,
+    "skills": ["fire_bolt"]
+  }
+]

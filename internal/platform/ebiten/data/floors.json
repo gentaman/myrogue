@@ -1,0 +1,95 @@
+[
+  {
+    "floor": 0,
+    "min_rooms": 4,
+    "max_rooms": 6,
+    "enemy_count": 4,
+    "item_count": 3,
+    "enemy_pool": [
+      { "id": "slime", "weight": 90 },
+      { "id": "golden_slime", "weight": 10 }
+    ],
+    "item_pool": [
+      { "id": "piece_of_paper", "weight": 50 },
+      { "id": "heal_small", "weight": 50 },
+      { "id": "weapon_wood", "weight": 20 },
+      { "id": "reveal_map", "weight": 15 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "thunder_staff", "weight": 20 },
+      { "id": "goddess_statue", "weight": 15 },
+      { "id": "scroll_holy_light", "weight": 15 },
+      { "id": "shield_wood", "weight": 20 }
+    ],
+    "conditional_items": []
+  },
+  {
+    "floor": 1,
+    "min_rooms": 4,
+    "max_rooms": 6,
+    "enemy_count": 5,
+    "item_count": 4,
+    "enemy_pool": [
+      { "id": "slime", "weight": 30 },
+      { "id": "goblin", "weight": 40 }
+    ],
+    "item_pool": [
+      { "id": "heal_small", "weight": 30 },
+      { "id": "heal_large", "weight": 20 },
+      { "id": "weapon_iron", "weight": 15 },
+      { "id": "shield_iron", "weight": 15 },
+      { "id": "reveal_map", "weight": 15 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "thunder_staff", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 },
+      { "id": "scroll_holy_light", "weight": 50 },
+      { "id": "armor_wood", "weight": 20 }
+    ],
+    "conditional_items": []
+  },
+  {
+    "floor": 2,
+    "min_rooms": 5,
+    "max_rooms": 8,
+    "enemy_count": 6,
+    "item_count": 4,
+    "enemy_pool": [
+      { "id": "golden_slime", "weight": 10 },
+      { "id": "goblin", "weight": 40 },
+      { "id": "orc", "weight": 30 }
+    ],
+    "item_pool": [
+      { "id": "heal_small", "weight": 30 },
+      { "id": "heal_large", "weight": 20 },
+      { "id": "weapon_iron", "weight": 15 },
+      { "id": "shield_iron", "weight": 15 },
+      { "id": "clairvoyant", "weight": 10 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "thunder_staff", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 },
+      { "id": "armor_wood", "weight": 20 }
+    ],
+    "conditional_items": []
+  },
+  {
+    "floor": 3,
+    "min_rooms": 8,
+    "max_rooms": 10,
+    "enemy_count": 8,
+    "item_count": 5,
+    "enemy_pool": [
+      { "id": "goblin", "weight": 20 },
+      { "id": "orc", "weight": 70 },
+      { "id": "red_dragon", "weight": 10 }
+    ],
+    "item_pool": [
+      { "id": "heal_large", "weight": 30 },
+      { "id": "clairvoyant", "weight": 10 },
+      { "id": "fireball", "weight": 15 },
+      { "id": "thunder_staff", "weight": 15 },
+      { "id": "goddess_statue", "weight": 15 }
+    ],
+    "conditional_items": [
+      { "id": "treasure", "condition": "unique" }
+    ]
+  }
+]

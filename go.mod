@@ -1,4 +1,4 @@
-module main.go
+module github.com/gentaman/myrogue
 
 go 1.26.2
 
