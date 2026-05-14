@@ -134,8 +134,12 @@ func (s *ChestScene) Draw(r Renderer) {
 			clr = Color{255, 255, 255, 255}
 		}
 		name := entry.DefID
-		if def, ok := s.game.registry.GetItemDef(entry.DefID); ok {
+		def, ok := s.game.registry.GetItemDef(entry.DefID)
+		if ok {
 			name = def.Name
+			if def.Durability > 0 {
+				name = fmt.Sprintf("%s [%d/%d]", def.Name, entry.Durability, def.Durability)
+			}
 		}
 		r.DrawText(name, 12, leftX+30, y, clr, false)
 	}
@@ -158,8 +162,12 @@ func (s *ChestScene) Draw(r Renderer) {
 				clr = Color{255, 255, 255, 255}
 			}
 			name := entry.DefID
-			if def, ok := s.game.registry.GetItemDef(entry.DefID); ok {
+			def, ok := s.game.registry.GetItemDef(entry.DefID)
+			if ok {
 				name = def.Name
+				if def.Durability > 0 {
+					name = fmt.Sprintf("%s [%d/%d]", def.Name, entry.Durability, def.Durability)
+				}
 			}
 			if entry.Equipped {
 				name = "[E] " + name

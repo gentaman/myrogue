@@ -17,6 +17,11 @@ func (b *HostileBrain) Decide(ctx *DecisionContext) action.Action {
 		return b.wander(ctx)
 	}
 
+	// スキルの検討
+	if act := b.trySkill(ctx, target, tx, ty); act != nil {
+		return act
+	}
+
 	dx := tx - ctx.SelfPos.X
 	dy := ty - ctx.SelfPos.Y
 	if world.Abs(dx)+world.Abs(dy) == 1 {
@@ -32,8 +37,6 @@ func (b *HostileBrain) Decide(ctx *DecisionContext) action.Action {
 	case component.PersonalityCalculated:
 		playerPos := ctx.Query.GetPosition(ctx.Query.PlayerID())
 		if playerPos != nil {
-			stats := ctx.Query.GetFaction(ctx.Query.PlayerID())
-			_ = stats
 			flee = false
 		}
 	}
@@ -55,6 +58,50 @@ func (b *HostileBrain) Decide(ctx *DecisionContext) action.Action {
 		return &action.WaitAction{}
 	}
 	return &action.MoveAction{DX: nx - ctx.SelfPos.X, DY: ny - ctx.SelfPos.Y}
+}
+
+func (b *HostileBrain) trySkill(ctx *DecisionContext, target entity.ID, tx, ty int) action.Action {
+	skillIDs := ctx.Query.GetSkills(ctx.Self)
+	if len(skillIDs) == 0 {
+		return nil
+	}
+
+	stats := ctx.Query.GetStats(ctx.Self)
+	if stats == nil {
+		return nil
+	}
+
+	// 性格による魔法使用率の決定
+	useChance := 20
+	switch ctx.SelfAI.Personality {
+	case component.PersonalityAggressive:
+		useChance = 15
+	case component.PersonalityCalculated:
+		useChance = 40
+	case component.PersonalityCowardly:
+		useChance = 60
+	}
+
+	if ctx.Query.RNG().Intn(100) >= useChance {
+		return nil
+	}
+
+	dist := world.Abs(ctx.SelfPos.X-tx) + world.Abs(ctx.SelfPos.Y-ty)
+
+	// 使用可能なスキルを探す
+	reg := ctx.Query.Registry()
+	for _, id := range skillIDs {
+		sk, ok := reg.GetSkillDef(id)
+		if !ok || stats.MP < sk.MPCost {
+			continue
+		}
+
+		if sk.Range >= dist {
+			return &action.SkillAction{SkillID: id, TargetX: tx, TargetY: ty}
+		}
+	}
+
+	return nil
 }
 
 func (b *HostileBrain) findTarget(ctx *DecisionContext) (entity.ID, int, int) {

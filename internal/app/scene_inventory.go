@@ -170,7 +170,10 @@ func (s *InventoryScene) Draw(r Renderer) {
 		if !ok {
 			continue
 		}
-		label := fmt.Sprintf("%s  x%d  (重%d)", def.Name, entry.Count, def.Weight)
+		label := def.Name
+		if def.Durability > 0 {
+			label = fmt.Sprintf("%s [%d/%d]", def.Name, entry.Durability, def.Durability)
+		}
 		w := r.MeasureText(label, 14) + padX + padRight
 		if w > panelW {
 			panelW = w
@@ -220,7 +223,10 @@ func (s *InventoryScene) Draw(r Renderer) {
 				if entry.Equipped {
 					eqMark = "[E] "
 				}
-				label = fmt.Sprintf("%s%s  x%d  (重%d)", eqMark, def.Name, entry.Count, def.Weight)
+				label = eqMark + def.Name
+				if def.Durability > 0 {
+					label = fmt.Sprintf("%s%s [%d/%d]", eqMark, def.Name, entry.Durability, def.Durability)
+				}
 			}
 			r.DrawText(label, 14, panelX+44, y, clr, false)
 		}

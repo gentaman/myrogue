@@ -17,8 +17,11 @@ type SkillScene struct {
 
 func NewSkillScene(game *GameScene) *SkillScene {
 	var skills []content.SkillDef
-	for _, sk := range game.registry.Skills {
-		skills = append(skills, sk)
+	playerSkillIDs := game.GetSkills(game.Player)
+	for _, id := range playerSkillIDs {
+		if sk, ok := game.registry.GetSkillDef(id); ok {
+			skills = append(skills, *sk)
+		}
 	}
 	return &SkillScene{game: game, skills: skills}
 }

@@ -17,7 +17,8 @@
     "vit": 0,
     "agi": 0,
     "luk": 1,
-    "floor_min": 0
+    "floor_min": 0,
+    "skills": ["poison_gas"]
   },
   {
     "id": "golden_slime",
@@ -74,7 +75,8 @@
     "fai": 1,
     "vit": 5,
     "agi": 2,
-    "luk": 1
+    "luk": 1,
+    "skills": ["war_cry"]
   },
   {
     "id": "red_dragon",
@@ -93,6 +95,7 @@
     "fai": 3,
     "vit": 10,
     "agi": 10,
-    "luk": 5
+    "luk": 5,
+    "skills": ["fire_bolt"]
   }
 ]

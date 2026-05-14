@@ -37,6 +37,7 @@ func (g *GameScene) spawnPlayer(reg *content.Registry) {
 	race := def.Race
 	g.Races.Set(g.Player, &race)
 	g.Appearances.Set(g.Player, &component.Appearance{DefID: "player", HasSprite: true})
+	g.Skills.Set(g.Player, &component.SkillComp{Skills: def.Skills})
 }
 
 func (g *GameScene) generateFloor(floor int) {
@@ -126,6 +127,7 @@ func (g *GameScene) spawnEnemyAt(def *content.ActorDef, x, y int) entity.ID {
 	g.Races.Set(id, &race)
 	g.Appearances.Set(id, &component.Appearance{DefID: def.ID, ColorHex: def.ColorHex})
 	g.Inventories.Set(id, &component.Inventory{})
+	g.Skills.Set(id, &component.SkillComp{Skills: def.Skills})
 	return id
 }
 
@@ -165,6 +167,7 @@ func (g *GameScene) spawnCompanion(defID string) {
 			g.Races.Set(id, &race)
 			g.Appearances.Set(id, &component.Appearance{DefID: def.ID, ColorHex: def.ColorHex})
 			g.Inventories.Set(id, &component.Inventory{})
+			g.Skills.Set(id, &component.SkillComp{Skills: def.Skills})
 			return
 		}
 	}

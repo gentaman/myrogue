@@ -192,6 +192,7 @@ func loadActors(data []byte) ([]ActorDef, map[string]int, error) {
 			Vit:               raw.Vit,
 			Agi:               raw.Agi,
 			Luk:               raw.Luk,
+			Skills:            raw.Skills,
 		}
 	}
 	return defs, idMap, nil

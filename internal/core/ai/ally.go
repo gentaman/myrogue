@@ -18,6 +18,11 @@ func (b *AllyBrain) Decide(ctx *DecisionContext) action.Action {
 
 	target, tx, ty := b.findHostile(ctx)
 	if target != entity.InvalidID {
+		// スキルの検討
+		if act := b.trySkill(ctx, target, tx, ty); act != nil {
+			return act
+		}
+
 		dx := tx - ctx.SelfPos.X
 		dy := ty - ctx.SelfPos.Y
 		if world.Abs(dx)+world.Abs(dy) == 1 {
@@ -38,6 +43,50 @@ func (b *AllyBrain) Decide(ctx *DecisionContext) action.Action {
 		return &action.WaitAction{}
 	}
 	return b.moveToward(ctx, playerPos.X, playerPos.Y)
+}
+
+func (b *AllyBrain) trySkill(ctx *DecisionContext, target entity.ID, tx, ty int) action.Action {
+	skillIDs := ctx.Query.GetSkills(ctx.Self)
+	if len(skillIDs) == 0 {
+		return nil
+	}
+
+	stats := ctx.Query.GetStats(ctx.Self)
+	if stats == nil {
+		return nil
+	}
+
+	// 性格による魔法使用率の決定
+	useChance := 20
+	switch ctx.SelfAI.Personality {
+	case component.PersonalityAggressive:
+		useChance = 15
+	case component.PersonalityCalculated:
+		useChance = 50
+	case component.PersonalityCowardly:
+		useChance = 70
+	}
+
+	if ctx.Query.RNG().Intn(100) >= useChance {
+		return nil
+	}
+
+	dist := world.Abs(ctx.SelfPos.X-tx) + world.Abs(ctx.SelfPos.Y-ty)
+
+	// 使用可能なスキルを探す
+	reg := ctx.Query.Registry()
+	for _, id := range skillIDs {
+		sk, ok := reg.GetSkillDef(id)
+		if !ok || stats.MP < sk.MPCost {
+			continue
+		}
+
+		if sk.Range >= dist {
+			return &action.SkillAction{SkillID: id, TargetX: tx, TargetY: ty}
+		}
+	}
+
+	return nil
 }
 
 func (b *AllyBrain) findHostile(ctx *DecisionContext) (entity.ID, int, int) {

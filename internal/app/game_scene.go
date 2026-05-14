@@ -35,6 +35,7 @@ type GameScene struct {
 	Rewards       *entity.Store[component.Reward]
 	Elements      *entity.Store[component.Element]
 	Races         *entity.Store[component.Race]
+	Skills        *entity.Store[component.SkillComp]
 	StatusEffects *entity.Store[component.StatusEffects]
 
 	Player    entity.ID
@@ -94,6 +95,7 @@ func RestoreGameScene(snap *save.Snapshot, reg *content.Registry, audio AudioPla
 		Rewards:       entity.NewStore[component.Reward](),
 		Elements:      entity.NewStore[component.Element](),
 		Races:         entity.NewStore[component.Race](),
+		Skills:        entity.NewStore[component.SkillComp](),
 		StatusEffects: entity.NewStore[component.StatusEffects](),
 		Scheduler:     turn.NewScheduler(),
 		registry:      reg,
@@ -151,6 +153,7 @@ func NewGameScene(reg *content.Registry, audio AudioPlayer, ss *save.Service) *G
 		Rewards:       entity.NewStore[component.Reward](),
 		Elements:      entity.NewStore[component.Element](),
 		Races:         entity.NewStore[component.Race](),
+		Skills:        entity.NewStore[component.SkillComp](),
 		StatusEffects: entity.NewStore[component.StatusEffects](),
 		Scheduler:     turn.NewScheduler(),
 		registry:      reg,
@@ -238,6 +241,13 @@ func (g *GameScene) GetRace(id entity.ID) component.Race {
 		return component.RaceHuman
 	}
 	return *r
+}
+func (g *GameScene) GetSkills(id entity.ID) []string {
+	s, ok := g.Skills.Get(id)
+	if ok {
+		return s.Skills
+	}
+	return nil
 }
 func (g *GameScene) GetRewardXP(id entity.ID) int {
 	r, ok := g.Rewards.Get(id)

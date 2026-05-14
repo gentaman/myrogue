@@ -35,22 +35,11 @@ func (s *DebugItemScene) Update(input InputState) Scene {
 		itemDef := items[s.cursor]
 		inv := s.game.GetInventory(s.game.Player)
 		if inv != nil {
-			// Find if already exists to stack or just add
-			found := false
-			for i := range inv.Items {
-				if inv.Items[i].DefID == itemDef.ID {
-					inv.Items[i].Count++
-					found = true
-					break
-				}
-			}
-			if !found {
-				inv.Items = append(inv.Items, component.ItemEntry{
-					DefID:      itemDef.ID,
-					Count:      1,
-					Durability: itemDef.Durability,
-				})
-			}
+			inv.Items = append(inv.Items, component.ItemEntry{
+				DefID:      itemDef.ID,
+				Count:      1,
+				Durability: itemDef.Durability,
+			})
 			s.game.pushMessage(fmt.Sprintf("デバッグ: %s を入手しました", itemDef.Name))
 		}
 		return s.game

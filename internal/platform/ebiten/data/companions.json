@@ -1,7 +1,7 @@
 [
   {
     "id": "dog",
-    "name": "犬",
+    "name": "闘犬ガオ",
     "hp": 5,
     "element": "none",
     "race": "beast",
@@ -18,5 +18,26 @@
     "vit": 2,
     "agi": 4,
     "luk": 3
+  },
+  {
+    "id": "fairy",
+    "name": "妖精ルリ",
+    "hp": 5,
+    "element": "light",
+    "race": "holy_beast",
+    "personality": "aggressive",
+    "neutral_threshold": -50,
+    "friendly_threshold": 80,
+    "friendly_fire": true,
+    "rarity": 2,
+    "xp": 0,
+    "color": "#A0E0A0",
+    "str": 1,
+    "wis": 3,
+    "fai": 2,
+    "vit": 2,
+    "agi": 4,
+    "luk": 4,
+    "skills": ["ice_lance", "heal"]
   }
 ]

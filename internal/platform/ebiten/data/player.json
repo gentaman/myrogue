@@ -18,6 +18,7 @@
     "fai": 3,
     "vit": 3,
     "agi": 3,
-    "luk": 3
+    "luk": 3,
+    "skills": ["fire_bolt"]
   }
 ]
